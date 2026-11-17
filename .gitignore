@@ -1,0 +1,32 @@
+# Xcode
+DerivedData/
+build/
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.moved-aside
+*.hmap
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Packages/
+
+# Outputs and signing material (never commit certificates or profiles)
+*.app
+*.dmg
+*.pkg
+*.dSYM
+*.dSYM.zip
+*.p12
+*.provisionprofile
+notarization/
+
+# PDFium binaries are downloaded by script, not committed
+third_party/pdfium/*.xcframework/
+third_party/pdfium/downloads/
+
+# macOS and scratch files
+.DS_Store
+scratch/
+*.local.pdf
