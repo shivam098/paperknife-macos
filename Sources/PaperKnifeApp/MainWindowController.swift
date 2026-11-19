@@ -59,6 +59,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSToolba
         window.toolbar = toolbar
         window.toolbarStyle = .expanded
         if !window.setFrameUsingName(Self.frameName) {
+            // The first time, as large as the design wants but never larger than the screen.
+            if let visible = (window.screen ?? NSScreen.main)?.visibleFrame {
+                let size = NSSize(width: min(1280, visible.width), height: min(820, visible.height))
+                window.setFrame(NSRect(origin: visible.origin, size: size), display: false)
+            }
+
             window.center()
         }
 
