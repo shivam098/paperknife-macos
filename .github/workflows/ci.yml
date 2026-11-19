@@ -116,17 +116,19 @@ jobs:
           name: paperknife-mac-release
           path: release
 
-      - name: Open a PDF and take a screenshot
+      - name: Open a PDF, take a screenshot, and click its text
         run: |
+          brew install cliclick
           ditto -x -k release/PaperKnife-*-mac.zip app
           open -a "$PWD/app/PaperKnife.app" "$PWD/conformance/documents/90f66aab2200.pdf"
           sleep 10
           screencapture -x screenshot.png
-          osascript -e 'tell application "System Events" to tell process "PaperKnife" to get {position, size} of window 1' || true
+          bash scripts/ci-click-page.sh 0.2191 0.1365 "Hello World" screenshot-selected.png
           osascript -e 'quit app "PaperKnife"' || true
 
       - uses: actions/upload-artifact@v7
+        if: always()
         with:
           name: paperknife-mac-screenshot
-          path: screenshot.png
+          path: screenshot*.png
           if-no-files-found: error
