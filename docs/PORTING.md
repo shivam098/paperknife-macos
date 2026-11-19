@@ -57,7 +57,10 @@ these rules everywhere.
    PDFium works in `float`, and `TextShowSimulator` sums line positions in `float` on purpose.
    C# casts to integers saturate and give 0 for NaN; Swift's trap: use `DotNetMath.toInt32` and
    `toInt64`. `Math.Round(x)` rounds ties to even and `Math.Round(x, digits[, mode])` scales by a
-   power of 10: use `DotNetMath.round` and `roundAwayFromZero`.
+   power of 10: use `DotNetMath.round` and `roundAwayFromZero`. `Math.Max` and `Math.Min`
+   propagate NaN and put -0 below +0, unlike Swift's `max` and `min`: use `DotNetMath.maximum`
+   and `minimum` on `Float` and `Double`. Records, `Equals` and `SequenceEqual` compare floats with
+   `float.Equals`, for which NaN equals NaN: `DotNetMath.equals` and `dotNetSequenceEqual`.
 7. **Formatting and parsing numbers.** `CosWriter.Number` is
    `DotNetMath.formatUpTo10Decimals(DotNetMath.round(value, 10))`, with "-0" written as "0". Parse
    only the syntax the C# code accepts: `DotNetParse.hexInt32` for `AllowHexSpecifier`,
@@ -65,10 +68,16 @@ these rules everywhere.
    C# lexer allows before calling `Double(_:)`.
 8. **Bytes and text encodings.** Use `[UInt8]` (and `ArraySlice<UInt8>` where C# uses spans) for
    file data. `Encoding.Latin1` is `Latin1.string` and `Latin1.bytes`. Big-endian UTF-16 and UTF-8
-   decoding must replace invalid sequences the way .NET does (U+FFFD).
+   decoding must replace invalid sequences the way .NET does (U+FFFD); `Encoding.UTF8.GetString`
+   is `Utf8.string`.
 9. **Exceptions.** Where C# throws and catches (for example `PdfException`, or the read failures
    `DocumentSession` turns into refusals), Swift throws and catches errors that keep the same
-   meaning and messages.
+   meaning and messages. They are classes with C#'s hierarchy, so `error is ArgumentException`
+   matches what `catch (ArgumentException)` does: `DotNetException` (C#'s `Exception`),
+   `ArgumentException`, `ArgumentOutOfRangeException` (with the `ThrowIf…` helpers),
+   `InvalidOperationException`, `ObjectDisposedException` and `PdfException`. Where C# throws an
+   exception the app catches, such as `ObjectDisposedException` from a closed document, Swift
+   throws too rather than trapping.
 10. **Messages.** Copy every message shown to users exactly, typographic quotes (“ ” ’) included:
     the corpus compares them.
 11. **PDFium.** All calls go through `PdfiumLibrary` under one global lock, as C#'s
