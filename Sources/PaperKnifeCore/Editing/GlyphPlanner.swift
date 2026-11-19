@@ -275,7 +275,7 @@ final class GlyphPlanner {
                 return nil
             }
 
-            let text = try TextEquivalence.normalize(pieces[s].text).units
+            let text = TextEquivalence.normalize(pieces[s].text).units
             let codes = show.codes()
             let reusable = font === edited.font && show.fontSize == edited.fontSize && show.charSpace == edited.charSpace
                 && show.wordSpace == edited.wordSpace && show.horizontalScale == edited.horizontalScale && show.rise == edited.rise
@@ -286,7 +286,7 @@ final class GlyphPlanner {
                     return nil
                 }
 
-                let glyphText = try TextEquivalence.normalize(Encodings.expandLigatures(unicode)).units
+                let glyphText = TextEquivalence.normalize(Encodings.expandLigatures(unicode)).units
                 if position + glyphText.count > text.count || !text[position..<(position + glyphText.count)].elementsEqual(glyphText) {
                     return nil
                 }

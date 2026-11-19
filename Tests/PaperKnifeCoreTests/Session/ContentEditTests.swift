@@ -37,7 +37,7 @@ final class ContentEditTests: XCTestCase {
 
     /// The one run on the first page whose text is equivalent to `text`.
     private func find(_ session: DocumentSession, _ text: String) throws -> PdfTextRun {
-        let matches = try session.getTextRuns(0).filter { try TextEquivalence.areEquivalent($0.text, text) }
+        let matches = try session.getTextRuns(0).filter { TextEquivalence.areEquivalent($0.text, text) }
         XCTAssertEqual(matches.count, 1, "\(matches.count) runs read “\(text)”.")
         return try XCTUnwrap(matches.first)
     }

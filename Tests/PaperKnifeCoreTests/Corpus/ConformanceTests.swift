@@ -345,7 +345,7 @@ private enum CorpusRecorder {
     private static func findRun(_ session: DocumentSession, _ page: Int, _ text: String) throws -> PdfTextRun {
         let runs = try session.getTextRuns(page)
         let exact = runs.filter { $0.text.ordinalEquals(text) }
-        let matches = try exact.count > 0 ? exact : runs.filter { try TextEquivalence.areEquivalent($0.text, text) }
+        let matches = exact.count > 0 ? exact : runs.filter { TextEquivalence.areEquivalent($0.text, text) }
         guard matches.count == 1 else {
             throw CorpusError("\(matches.count) runs on page \(page + 1) read “\(text)”; a step must name exactly one.")
         }
