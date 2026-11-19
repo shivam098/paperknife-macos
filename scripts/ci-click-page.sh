@@ -6,39 +6,62 @@
 # Usage: ci-click-page.sh <x> <y> <expected text> <screenshot.png>
 set -euo pipefail
 
-# Runs AppleScript in PaperKnife's window: "element" goes over everything in it, and the script's
-# result is printed.
-in_window() {
-  osascript - <<APPLESCRIPT
+# Every element of PaperKnife's window, one per line: role, description, left, top, width, height
+# and, for text fields, value, separated by tabs.
+elements() {
+  osascript <<'APPLESCRIPT'
+set output to ""
 tell application "System Events" to tell process "PaperKnife"
-  repeat with element in (entire contents of window 1)
+  set found to entire contents of window 1
+  repeat with i from 1 to count of found
+    set element to item i of found
     try
-      $1
+      set elementRole to role of element
+      set elementDescription to ""
+      try
+        set elementDescription to description of element
+      end try
+      set {x, y} to {0, 0}
+      set {w, h} to {0, 0}
+      try
+        set {x, y} to position of element
+        set {w, h} to size of element
+      end try
+      set elementValue to ""
+      if elementRole is "AXTextField" then
+        try
+          set elementValue to value of element
+        end try
+      end if
+      set output to output & elementRole & tab & elementDescription & tab & x & tab & y & tab & w & tab & h & tab & elementValue & linefeed
     end try
   end repeat
 end tell
-return ""
+return output
 APPLESCRIPT
 }
 
-frame=$(in_window 'if role of element is "AXImage" and description of element is "Page" then return (position of element) & (size of element)')
-if [ -z "$frame" ]; then
+list=$(elements)
+page=$(awk -F '\t' '$1 == "AXImage" && $2 == "Page" { print $3, $4, $5; exit }' <<< "$list")
+if [ -z "$page" ]; then
   echo "PaperKnife doesn't show a page. Its window has:"
-  osascript -e 'tell application "System Events" to tell process "PaperKnife" to get {role, description} of entire contents of window 1' || true
+  echo "$list"
   exit 1
 fi
 
-IFS=', ' read -r left top width _ <<< "$frame"
+read -r left top width <<< "$page"
 x=$(awk -v l="$left" -v w="$width" -v f="$1" 'BEGIN { printf "%d", l + f * w }')
 y=$(awk -v t="$top" -v w="$width" -v f="$2" 'BEGIN { printf "%d", t + f * w }')
-echo "The page is at $frame; clicking ($x, $y)."
+echo "The page is at ($left, $top), $width wide; clicking ($x, $y)."
 cliclick "c:$x,$y"
 sleep 3
 screencapture -x "$4"
 
-value=$(in_window 'if role of element is "AXTextField" then return value of element')
+list=$(elements)
+value=$(awk -F '\t' '$1 == "AXTextField" { print $7; exit }' <<< "$list")
 if [ "$value" != "$3" ]; then
-  echo "The selected text is \"$value\", not \"$3\"."
+  echo "The selected text is \"$value\", not \"$3\". The window has:"
+  echo "$list"
   exit 1
 fi
 
