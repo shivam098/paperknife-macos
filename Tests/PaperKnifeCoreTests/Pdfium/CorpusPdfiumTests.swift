@@ -64,6 +64,55 @@ final class CorpusPdfiumTests: XCTestCase {
         print("Conformance corpus: \(names.count - failed) of \(names.count) cases give the stored pages and runs.")
     }
 
+    /// Cases whose first step `TextSupport.Check` refuses, on the font of the run's first changed
+    /// object and the text `TextRunEdit.Plan` gives the changed objects: in `ContentTextEdit` for
+    /// the layout rules and for "Ω", which Helvetica lacks, and before PDFium's rewrite for the
+    /// space CMR10 lacks. Their stored refusals must be what this layer's TextSupport says.
+    private static let textSupportCases = [
+        "edit-character-the-font-lacks",
+        "edit-unsupported-layout-devanagari",
+        "edit-unsupported-layout-emoji",
+        "edit-unsupported-layout-line-feed",
+        "edit-unsupported-layout-line-separator",
+        "tex-pdfium-rewrite-space-the-font-lacks",
+    ]
+
+    func testStoredCases_TextSupportRefusesWhatTheCorpusRefuses() throws {
+        let root = try Self.repositoryRoot()
+        for id in Self.textSupportCases {
+            let file = root.appendingPathComponent("conformance").appendingPathComponent("cases").appendingPathComponent("\(id).json")
+            guard let stored = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any],
+                let document = stored["document"] as? String,
+                let step = (stored["steps"] as? [[String: Any]])?.first,
+                let pageIndex = step["page"] as? Int,
+                let runText = step["run"] as? String,
+                let newText = step["text"] as? String,
+                let result = (step["expect"] as? [String: Any])?["result"] as? [String: Any],
+                let message = result["message"] as? String,
+                let characters = result["unsupportedCharacters"] as? [String]
+            else {
+                XCTFail("cases/\(id).json doesn't have the step this test reads.")
+                continue
+            }
+
+            let snapshot = try PdfSnapshot.fromFile(root.appendingPathComponent("conformance").appendingPathComponent(document).path)
+            let pdf = try PdfDocument.load(snapshot, stored["password"] as? String)
+            defer { pdf.dispose() }
+            try PdfiumLibrary.withLock {
+                let layouts = try pdf.getPage(pageIndex).getTextLayout().runs.filter { $0.run.text.ordinalEquals(runText) }
+                guard layouts.count == 1, let layout = layouts.first else {
+                    XCTFail("cases/\(id).json: \(layouts.count) runs read “\(runText)”.")
+                    return
+                }
+
+                let edit = try TextRunEdit.plan(layout.pieces.map { $0.text }, layout.separators, newText)
+                let support = TextSupport.check(layout.pieces[edit.first].font, layout.run.fontName, edit.newText)
+                XCTAssertEqual(support.problem?.units, message.units, "cases/\(id).json: \(support.problem ?? "supported")")
+                XCTAssertEqual(support.characters.map { $0.units }, characters.map { $0.units }, "cases/\(id).json: \(support.characters)")
+            }
+        }
+    }
+
     /// The first difference between a case's stored initial pages and what the PDFium layer reads,
     /// apart from the `allowed` values, whose differences are noted.
     private static func check(_ file: URL, _ root: URL, _ allowed: Set<String>, _ notes: inout [String]) throws -> String? {

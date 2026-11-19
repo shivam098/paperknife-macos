@@ -6,39 +6,62 @@ import Foundation
 /// (NFC, which also maps U+2126 OHM SIGN to U+03A9) and space separators are treated as equal;
 /// compatibility variants such as "²" and "2" or "…" and "..." stay different because they look
 /// different.
+///
+/// These throw where C# does: .NET's `Normalize` refuses U+FFFE and lone surrogates (which Swift
+/// strings can't hold, but each char of a surrogate pair is one on its own).
 enum TextEquivalence {
-    static func areEquivalent(_ a: String, _ b: String) -> Bool { normalize(a).ordinalEquals(normalize(b)) }
+    static func areEquivalent(_ a: String, _ b: String) throws -> Bool {
+        let first = try normalize(a)
+        let second = try normalize(b)
+        return first.ordinalEquals(second)
+    }
 
     /// Like `areEquivalent`, but ignores how much whitespace separates words and any at the ends.
     /// PDFium's text extraction skips text objects that draw only spaces and reports gaps as single
     /// generated spaces, so the spacing of rewritten text can't be read back exactly. Every space
     /// is checked to be drawable before it is written (see `TextSupport`).
-    static func areEquivalentIgnoringSpacing(_ a: String, _ b: String) -> Bool {
-        collapseSpaces(normalize(a)).ordinalEquals(collapseSpaces(normalize(b)))
+    static func areEquivalentIgnoringSpacing(_ a: String, _ b: String) throws -> Bool {
+        let first = try normalize(a)
+        let second = try normalize(b)
+        return collapseSpaces(first).ordinalEquals(collapseSpaces(second))
     }
 
-    static func normalize(_ text: String) -> String {
-        let normalized = text.normalizedFormC
-        return String(units: normalized.utf16.map { DotNetChar.category($0) == .spaceSeparator ? 0x20 : $0 })
+    static func normalize(_ text: String) throws -> String {
+        try normalize(units: text.utf16)
     }
 
-    /// Characters of `expected` that are missing from `actual`. Throws where C# does: C#'s
-    /// `Normalize` refuses a lone surrogate, which is what each char of a pair is on its own.
+    /// Characters of `expected` that are missing from `actual`.
     static func lost(_ expected: String, _ actual: String) throws -> [String] {
-        let have = normalize(actual)
+        let have = try normalize(actual)
         var lost: [String] = []
         for c in expected.utf16 {
-            if DotNetChar.isSurrogate(c) {
-                throw ArgumentException("Invalid Unicode code point found.", "strInput")
-            }
-
-            let character = String(units: [c])
-            if !have.ordinalContains(normalize(character)) {
-                lost.append(character)
+            let character = try normalize(units: [c])
+            if !have.ordinalContains(character) {
+                lost.append(String(units: [c]))
             }
         }
 
         return lost.distinctInOrder { OrdinalString($0) }
+    }
+
+    /// C#'s `Normalize(NormalizationForm.FormC)` of a string of these UTF-16 code units, with space
+    /// separators made spaces.
+    private static func normalize<C: Collection>(units: C) throws -> String where C.Element == UInt16 {
+        // .NET's check before it normalizes non-ASCII text (Normalization.HasInvalidUnicodeSequence).
+        var i = units.startIndex
+        while i != units.endIndex {
+            let c = units[i]
+            let next = units.index(after: i)
+            if c == 0xFFFE || DotNetChar.isLowSurrogate(c)
+                || (DotNetChar.isHighSurrogate(c) && (next == units.endIndex || !DotNetChar.isLowSurrogate(units[next]))) {
+                throw ArgumentException("Invalid Unicode code point found.", "strInput")
+            }
+
+            i = DotNetChar.isHighSurrogate(c) ? units.index(after: next) : next
+        }
+
+        let normalized = String(units: units).normalizedFormC
+        return String(units: normalized.utf16.map { DotNetChar.category($0) == .spaceSeparator ? 0x20 : $0 })
     }
 
     /// C#'s `string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))`:
