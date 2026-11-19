@@ -56,8 +56,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSToolba
 
         window.delegate = self
         let content = NSHostingView(rootView: MainView(model: model))
-        // The window's size is the user's to choose; the views only set the smallest it can be.
-        content.sizingOptions = [.minSize]
+        // The window's size is the user's to choose, within its minSize. SwiftUI mustn't size it:
+        // computing the views' minimum, it wraps the message bar's text at almost no width, which
+        // asks for a window taller than the screen.
+        content.sizingOptions = []
         window.contentView = content
         let toolbar = NSToolbar(identifier: "PaperKnife.Main")
         toolbar.delegate = self
