@@ -168,4 +168,20 @@ final class DotNetSupportTests: XCTestCase {
         let pairs = [(1, "x"), (0, "y"), (1, "z"), (0, "w")]
         XCTAssertEqual(pairs.stableSorted { $0.0 < $1.0 }.map(\.1), ["y", "w", "x", "z"])
     }
+
+    func testPathsAreHandledAsDotNetHandlesThemOnUnix() throws {
+        // As .NET's Unix Path gives them (PathInternal.RemoveRelativeSegments and
+        // GetDirectoryNameOffset): "." and ".." and repeated separators go, a trailing one stays.
+        XCTAssertEqual(try DotNetPath.getFullPath("/a/./b//c/../d.pdf"), "/a/b/d.pdf")
+        XCTAssertEqual(try DotNetPath.getFullPath("/.."), "/")
+        XCTAssertEqual(try DotNetPath.getFullPath("/a/b/"), "/a/b/")
+        XCTAssertEqual(try DotNetPath.getFullPath("d.pdf"), FileManager.default.currentDirectoryPath + "/d.pdf")
+        XCTAssertThrowsError(try DotNetPath.getFullPath("")) { XCTAssertTrue($0 is ArgumentException, "\($0)") }
+        XCTAssertEqual(DotNetPath.getDirectoryName("/a/b.pdf"), "/a")
+        XCTAssertEqual(DotNetPath.getDirectoryName("/b.pdf"), "/")
+        XCTAssertNil(DotNetPath.getDirectoryName("/"))
+        XCTAssertEqual(DotNetPath.getFileName("/a/b.pdf"), "b.pdf")
+        XCTAssertEqual(DotNetPath.combine("/", "~b.pdf.tmp"), "/~b.pdf.tmp")
+        XCTAssertEqual(DotNetPath.combine("/a", "~b.pdf.tmp"), "/a/~b.pdf.tmp")
+    }
 }
