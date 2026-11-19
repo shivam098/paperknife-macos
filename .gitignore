@@ -22,9 +22,8 @@ Packages/
 *.provisionprofile
 notarization/
 
-# PDFium binaries are downloaded by script, not committed
-third_party/pdfium/*.xcframework/
-third_party/pdfium/downloads/
+# PDFium binaries are downloaded by scripts/fetch-pdfium.sh, not committed
+third_party/pdfium/mac/
 
 # macOS and scratch files
 .DS_Store
