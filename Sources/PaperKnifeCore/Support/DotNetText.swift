@@ -270,7 +270,9 @@ enum Latin1 {
         String(units: bytes.map(UInt16.init))
     }
 
-    /// The bytes of a string; characters past U+00FF become "?", as .NET encodes them.
+    /// The bytes of a string whose characters are all up to U+00FF, which is all the engine encodes
+    /// (PDF syntax written by `CosWriter`). Each character past U+00FF becomes "?", where .NET maps
+    /// some to look-alikes (Ł to "L", ’ to "'"), so never let ported code encode such text.
     static func bytes(_ text: String) -> [UInt8] {
         text.utf16.map { $0 <= 0xFF ? UInt8($0) : 0x3F }
     }
@@ -279,26 +281,36 @@ enum Latin1 {
 /// .NET's integer parsing, which accepts less than Swift's `Int(_:radix:)` does.
 enum DotNetParse {
     /// `int.TryParse(text, NumberStyles.AllowHexSpecifier, ...)`: one to eight hex digits, nothing
-    /// else; eight digits above 7FFFFFFF give negative numbers, as in C#.
+    /// else but the trailing NULs .NET ignores; eight digits above 7FFFFFFF give negative numbers,
+    /// as in C#.
     static func hexInt32<C: Collection>(_ units: C) -> Int? where C.Element == UInt16 {
         guard !units.isEmpty else {
             return nil
         }
 
         var value: UInt64 = 0
-        for unit in units {
+        var index = units.startIndex
+        while index != units.endIndex {
+            let unit = units[index]
             let digit: UInt64
             switch unit {
             case 0x30...0x39: digit = UInt64(unit - 0x30)
             case 0x41...0x46: digit = UInt64(unit - 0x41 + 10)
             case 0x61...0x66: digit = UInt64(unit - 0x61 + 10)
-            default: return nil
+            default:
+                guard index != units.startIndex, units[index...].allSatisfy({ $0 == 0 }) else {
+                    return nil
+                }
+
+                return Int(Int32(bitPattern: UInt32(value)))
             }
 
             value = value * 16 + digit
             if value > 0xFFFF_FFFF {
                 return nil
             }
+
+            index = units.index(after: index)
         }
 
         return Int(Int32(bitPattern: UInt32(value)))
