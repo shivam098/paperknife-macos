@@ -26,6 +26,13 @@ final class OverflowException: DotNetException, @unchecked Sendable {
     }
 }
 
+/// C#'s `InvalidCastException`, from a cast such as `(CosNumber)operand`; a read failure too.
+final class InvalidCastException: DotNetException, @unchecked Sendable {
+    init() {
+        super.init("Specified cast is not valid.")
+    }
+}
+
 /// C#'s `IOException`. DocumentSession doesn't treat it as a read failure: it reaches the caller.
 class IOException: DotNetException, @unchecked Sendable {}
 
@@ -57,6 +64,9 @@ enum DotNetThrows {
 
     /// `new T[length]` with a negative length.
     static func overflow() -> Error { OverflowException() }
+
+    /// A cast to a type the object isn't, such as `(CosNumber)operand`.
+    static func invalidCast() -> Error { InvalidCastException() }
 }
 
 // MARK: - Text

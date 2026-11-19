@@ -39,6 +39,23 @@ final class SyntaxTests: XCTestCase {
         XCTAssertEqual(ops.map(\.operator), ["q", "cm", "BI", "Q", "BT", "Tf", "Td", "TJ", "ET"])
     }
 
+    func testContentParser_SkipsInlineImageDataWhoseSizeOverflows() throws {
+        // 536870910 gray bytes a row overflow 32 bits; wrapped, the size of 42 rows pointed back at
+        // the first EI, so reading went back to it and read the image again, forever.
+        let content = Latin1.bytes("EI BI /W 536870910 /H 42 /CS /G /BPC 8 ID x EI")
+        let parsed = expectation(description: "The content is parsed.")
+        let result = ParsedOperations()
+        DispatchQueue.global().async {
+            result.ops = ContentParser.parse(content)
+            parsed.fulfill()
+        }
+
+        wait(for: [parsed], timeout: 10)
+        let ops = try XCTUnwrap(result.ops)
+        XCTAssertEqual(ops.map(\.operator), ["EI", "BI"])
+        XCTAssertEqual(ops[1].end, content.count)
+    }
+
     func testIncrementalUpdate_KeepsEveryOriginalByteAndReplacesTheStream() throws {
         let original = RawPdf.singlePage(RawPdf.baseContent)
         let file = try XCTUnwrap(PdfFile.tryOpen(original))
@@ -51,11 +68,12 @@ final class SyntaxTests: XCTestCase {
         let reread = try XCTUnwrap(PdfFile.tryOpen(updated))
         let stream = try XCTUnwrap(reread.getObject(content.number) as? CosStream)
         XCTAssertEqual(Latin1.string(try XCTUnwrap(reread.decodeStream(stream))), "BT /F1 24 Tf 72 700 Td (Updated) Tj ET")
+        let session = try DocumentSession.fromSnapshot(PdfSnapshot.fromBytes(updated))
+        defer {
+            session.dispose()
+        }
 
-        // The C# test reads the runs of a DocumentSession; until that is ported, PDFium's own text
-        // of the page shows that PDFium reads the update too.
-        let text = try XCTUnwrap(SyntaxTestSupport.pdfiumText(updated, page: 0))
-        XCTAssertTrue(text.ordinalContains("Updated"), text)
+        XCTAssertTrue(try session.getTextRuns(0).contains { $0.text == "Updated" })
     }
 
     func testStreamFilters_RefuseDataThatExpandsTooFar() throws {
@@ -134,4 +152,9 @@ final class SyntaxTests: XCTestCase {
     }
 
     private func number(_ value: Int) -> CosNumber { CosNumber(Double(value), String(value)) }
+}
+
+/// What a parse on another thread gave, for a test that mustn't hang if the parser loops.
+private final class ParsedOperations: @unchecked Sendable {
+    var ops: [ContentOp]?
 }

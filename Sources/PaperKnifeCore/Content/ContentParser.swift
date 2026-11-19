@@ -19,7 +19,7 @@ struct ContentOp {
 /// Splits decoded page content into operations (ISO 32000-1, 7.8.2).
 enum ContentParser {
     /// The operations, or nil when the content can't be parsed with certainty.
-    static func parse(_ data: [UInt8]) throws -> [ContentOp]? {
+    static func parse(_ data: [UInt8]) -> [ContentOp]? {
         let lexer = PdfLexer(data)
         var ops: [ContentOp] = []
         var operands: [CosObject] = []
@@ -33,7 +33,7 @@ enum ContentParser {
             if token.kind == .keyword && token.text != "true" && token.text != "false" && token.text != "null" {
                 var end = token.end
                 if token.text == "BI" {
-                    end = try skipInlineImage(lexer)
+                    end = skipInlineImage(lexer)
                     if end < 0 {
                         return nil
                     }
@@ -58,7 +58,7 @@ enum ContentParser {
     }
 
     /// Moves past an inline image's dictionary, data and EI; returns the end offset, or -1.
-    private static func skipInlineImage(_ lexer: PdfLexer) throws -> Int {
+    private static func skipInlineImage(_ lexer: PdfLexer) -> Int {
         let span = lexer.data
         var dict: [String: CosObject] = [:]
         while true {
@@ -69,20 +69,11 @@ enum ContentParser {
                     data += 1
                 }
 
-                if let length = unfilteredLength(dict) {
-                    // C# adds in 32 bits, so a crafted size can make this negative: reading
-                    // there throws IndexOutOfRangeException.
-                    let after = Int(Int32(truncatingIfNeeded: data) &+ length)
-                    if after <= span.count {
-                        guard after >= 0 else {
-                            throw DotNetThrows.indexOutOfRange()
-                        }
-
-                        let end = PdfLexer(lexer.data, after).next()
-                        if end.isKeyword("EI") {
-                            lexer.position = end.end
-                            return end.end
-                        }
+                if let length = unfilteredLength(dict), Int(length) <= span.count - data {
+                    let end = PdfLexer(lexer.data, data + Int(length)).next()
+                    if end.isKeyword("EI") {
+                        lexer.position = end.end
+                        return end.end
                     }
                 }
 
@@ -108,7 +99,7 @@ enum ContentParser {
         }
     }
 
-    /// The length of unfiltered image data, computed in 32 bits as C# computes it (so it can wrap).
+    /// The length of unfiltered image data, or nil when it isn't known.
     private static func unfilteredLength(_ dict: [String: CosObject]) -> Int32? {
         func get(_ shortKey: String, _ longKey: String) -> CosObject? { dict[shortKey] ?? dict[longKey] }
 
@@ -150,7 +141,18 @@ enum ContentParser {
             return nil
         }
 
-        return h &* ((w &* c &* b &+ 7) / 8)
+        return size(c, b, w, h)
+    }
+
+    /// The size of an image's data, or nil when it doesn't fit in an Int32, as no content stream's
+    /// can: C#'s `checked(height * (((width * components * bits) + 7) / 8))`, which throws at the
+    /// first overflow.
+    private static func size(_ components: Int32, _ bits: Int32, _ width: Int32, _ height: Int32) -> Int32? {
+        let (samples, samplesOverflow) = width.multipliedReportingOverflow(by: components)
+        let (rowBits, rowBitsOverflow) = samples.multipliedReportingOverflow(by: bits)
+        let (padded, paddedOverflow) = rowBits.addingReportingOverflow(7)
+        let (size, sizeOverflow) = height.multipliedReportingOverflow(by: padded / 8)
+        return samplesOverflow || rowBitsOverflow || paddedOverflow || sizeOverflow ? nil : size
     }
 }
 
