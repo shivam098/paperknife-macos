@@ -116,7 +116,7 @@ jobs:
           name: paperknife-mac-release
           path: release
 
-      - name: Open a PDF, take a screenshot, and click its text
+      - name: Open a PDF, take a screenshot, and edit its text
         run: |
           brew install cliclick
           ditto -x -k release/PaperKnife-*-mac.zip app
@@ -124,6 +124,7 @@ jobs:
           sleep 10
           screencapture -x screenshot.png
           bash scripts/ci-click-page.sh 0.2191 0.1365 "Hello World" screenshot-selected.png
+          bash scripts/ci-edit-text.sh "Hello PaperKnife" "Text updated" screenshot-edited.png
           osascript -e 'quit app "PaperKnife"' || true
 
       - uses: actions/upload-artifact@v7

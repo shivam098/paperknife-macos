@@ -81,93 +81,85 @@ struct PageBitmap {
 
 /// PaperKnife's engine as the app uses it: a DocumentSession, ported from PaperKnife for Windows.
 /// Calls can take long, so EditorModel makes them on its engine queue, one at a time.
-///
-/// Until the session is ported, this opens, draws and reads documents with the engine's document
-/// layer, and every command that would change a document fails with a message.
 final class Editor {
-    private static let notYet = "This build of PaperKnife can show PDFs but can't change them yet."
+    private let session: DocumentSession
 
-    let filePath: String?
-    private let document: PdfDocument
-
-    private init(filePath: String?, document: PdfDocument) {
-        self.filePath = filePath
-        self.document = document
+    private init(session: DocumentSession) {
+        self.session = session
     }
 
     static func open(path: String, password: String?) throws -> Editor {
         do {
-            return Editor(filePath: path, document: try PdfDocument.load(try PdfSnapshot.fromFile(path), password))
+            return Editor(session: try DocumentSession.open(path: path, password: password))
         } catch let error as PdfException where error.errorCode == .passwordRequired {
             throw EditorError.passwordRequired
         }
     }
 
-    /// The document's state; an empty one once the document is closed, as on Windows.
+    /// The file the document was opened from or last saved as.
+    var filePath: String? { session.filePath }
+
+    /// The session's state; an empty one once the session is closed, as on Windows.
     var state: SessionState {
-        guard let pageCount = try? document.pageCount, let signatureCount = try? document.signatureCount else {
+        guard let pageCount = try? session.pageCount, let signatureCount = try? session.signatureCount else {
             return SessionState()
         }
 
-        return SessionState(pageCount: pageCount, signatureCount: signatureCount)
+        return SessionState(
+            pageCount: pageCount, canUndo: session.canUndo, canRedo: session.canRedo,
+            isModified: session.isModified, signatureCount: signatureCount)
     }
 
     func pageSize(_ page: Int) throws -> CGSize {
-        let page = try document.getPage(page)
-        return CGSize(width: CGFloat(try page.width), height: CGFloat(try page.height))
+        let size = try session.getPageSize(page)
+        return CGSize(width: CGFloat(size.width), height: CGFloat(size.height))
     }
 
     func render(_ page: Int, width: Int, height: Int) throws -> PageBitmap {
-        let rendered = try document.getPage(page).render(width, height)
+        let rendered = try session.renderPage(page, width, height)
         return PageBitmap(image: try Self.image(rendered), width: rendered.width, height: rendered.height)
     }
 
-    func textRuns(_ page: Int) throws -> [TextRun] { try document.getPage(page).getTextRuns().map(Self.run) }
+    func textRuns(_ page: Int) throws -> [TextRun] { try session.getTextRuns(page).map(Self.run) }
 
     /// The text run, or nil when there is none or it can't be read.
-    func textRun(_ page: Int, objectIndex: Int) -> TextRun? { (try? document.getPage(page).tryGetTextRun(objectIndex)).map(Self.run) }
+    func textRun(_ page: Int, objectIndex: Int) -> TextRun? { (try? session.getTextRun(page, objectIndex)).map(Self.run) }
 
     /// The text under the point, or nil when there is none or it can't be read.
     func hitTest(_ page: Int, width: Int, height: Int, x: Int, y: Int) -> TextRun? {
-        (try? document.getPage(page).hitTestText(width, height, x, y)).map(Self.run)
+        (try? session.hitTestText(page, width, height, x, y)).map(Self.run)
     }
 
     /// The rectangle in pixels of a page drawn at this size, or nil when it can't be mapped.
     func mapToPixels(_ page: Int, rect: PageRect, width: Int, height: Int) -> CGRect? {
-        guard let mapped = try? document.getPage(page).mapToPixels(PdfRect(rect.left, rect.bottom, rect.right, rect.top), width, height) else {
+        guard let mapped = try? session.mapToPixels(page, PdfRect(rect.left, rect.bottom, rect.right, rect.top), width, height) else {
             return nil
         }
 
         return CGRect(x: mapped.x, y: mapped.y, width: mapped.width, height: mapped.height)
     }
 
-    func editBlockers(_ page: Int) throws -> [String] { [] }
+    func editBlockers(_ page: Int) throws -> [String] { try session.getTextEditBlockers(page) }
 
     func replaceText(_ page: Int, objectIndex: Int, text: String) throws -> EditOutcome {
-        throw EditorError.failed(Self.notYet)
+        Self.outcome(try session.replaceText(page, objectIndex, text))
     }
 
-    func rotatePage(_ page: Int, quarterTurns: Int) throws -> EditOutcome {
-        throw EditorError.failed(Self.notYet)
-    }
+    func rotatePage(_ page: Int, quarterTurns: Int) throws -> EditOutcome { Self.outcome(try session.rotatePage(page, quarterTurns)) }
 
-    func deletePage(_ page: Int) throws -> EditOutcome {
-        throw EditorError.failed(Self.notYet)
-    }
+    func deletePage(_ page: Int) throws -> EditOutcome { Self.outcome(try session.deletePage(page)) }
 
-    func appendDocument(path: String) throws -> EditOutcome {
-        throw EditorError.failed(Self.notYet)
-    }
+    func appendDocument(path: String) throws -> EditOutcome { Self.outcome(try session.appendDocument(try PdfSnapshot.fromFile(path))) }
 
-    func undo() -> Bool { false }
+    /// Whether there was an edit to undo; false also when the session can't (it is closed).
+    func undo() -> Bool { (try? session.undo()) ?? false }
 
-    func redo() -> Bool { false }
+    /// Whether there was an edit to redo; false also when the session can't (it is closed).
+    func redo() -> Bool { (try? session.redo()) ?? false }
 
-    func saveAs(path: String) throws {
-        throw EditorError.failed(Self.notYet)
-    }
+    func saveAs(path: String) throws { try session.saveAs(path: path) }
 
-    func close() { document.dispose() }
+    func close() { session.dispose() }
 
     private static func run(_ run: PdfTextRun) -> TextRun {
         TextRun(
@@ -175,6 +167,16 @@ final class Editor {
             bounds: PageRect(left: run.bounds.left, bottom: run.bounds.bottom, right: run.bounds.right, top: run.bounds.top),
             fontName: run.fontName, isFontEmbedded: run.isFontEmbedded, isFontSubset: run.isFontSubset,
             fontSize: run.fontSize, isInvisible: run.isInvisible)
+    }
+
+    private static func outcome(_ result: EditResult) -> EditOutcome {
+        let status: EditOutcome.Status = switch result.status {
+        case .applied: .applied
+        case .noChange: .noChange
+        case .rejected: .rejected
+        }
+
+        return EditOutcome(status: status, message: result.message, warnings: result.warnings, details: result.details, textRun: result.textRun.map(run))
     }
 
     /// PDFium's BGRA pixels, which are 32-bit little-endian words with alpha first.
