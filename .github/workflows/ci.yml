@@ -122,6 +122,7 @@ jobs:
           open -a "$PWD/app/PaperKnife.app" "$PWD/conformance/documents/90f66aab2200.pdf"
           sleep 10
           screencapture -x screenshot.png
+          osascript -e 'tell application "System Events" to tell process "PaperKnife" to get {position, size} of window 1' || true
           osascript -e 'quit app "PaperKnife"' || true
 
       - uses: actions/upload-artifact@v7

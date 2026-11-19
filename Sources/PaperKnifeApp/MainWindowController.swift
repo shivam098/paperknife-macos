@@ -40,8 +40,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSToolba
     ]
 
     init() {
+        // As large as the design wants, but never larger than the screen: the title bar and the
+        // toolbar take about 90 points above the content.
+        let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 910)
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1280, height: 820),
+            contentRect: NSRect(x: 0, y: 0, width: min(1280, screen.width), height: min(820, screen.height - 90)),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false)
@@ -52,19 +55,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSToolba
         super.init(window: window)
 
         window.delegate = self
-        window.contentView = NSHostingView(rootView: MainView(model: model))
+        let content = NSHostingView(rootView: MainView(model: model))
+        // The window's size is the user's to choose; the views only set the smallest it can be.
+        content.sizingOptions = [.minSize]
+        window.contentView = content
         let toolbar = NSToolbar(identifier: "PaperKnife.Main")
         toolbar.delegate = self
         toolbar.displayMode = .iconAndLabel
         window.toolbar = toolbar
         window.toolbarStyle = .expanded
         if !window.setFrameUsingName(Self.frameName) {
-            // The first time, as large as the design wants but never larger than the screen.
-            if let visible = (window.screen ?? NSScreen.main)?.visibleFrame {
-                let size = NSSize(width: min(1280, visible.width), height: min(820, visible.height))
-                window.setFrame(NSRect(origin: visible.origin, size: size), display: false)
-            }
-
             window.center()
         }
 
