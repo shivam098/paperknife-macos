@@ -105,17 +105,31 @@ these rules everywhere.
 13. **Reading files.** PaperKnife's own reader (`PdfFile`, `ContentPage`, `PdfFontInfo`,
     `FontCompletion`) throws where the C# one throws, with the exceptions `DocumentSession` turns
     into refusals (`IsReadFailure`: `ArgumentException`, `IndexOutOfRangeException`,
-    `InvalidOperationException`, `NullReferenceException`, `OverflowException` and the like).
-    `DotNetThrows` makes each one as the C# expression throws it. Flate data is inflated as .NET's
+    `InvalidCastException`, `InvalidOperationException`, `NullReferenceException`,
+    `OverflowException` and the like). `DotNetThrows` makes each one as the C# expression throws
+    it. Flate data is inflated as .NET's
     `ZLibStream` inflates it: data zlib refuses is damaged (`StreamFilters.isDamaged`: .NET's
     `InvalidDataException`, and the `ZLibException` it throws for data that asks for a preset
     dictionary), truncated data gives what it holds, and bytes after the end are ignored.
     `Encoding.BigEndianUnicode.GetString` is `Utf16BigEndian.string`.
+14. **Paths and saving.** `Path.GetFullPath`, `GetDirectoryName`, `GetFileName` and `Combine` are
+    `DotNetPath`'s: they make a path absolute and remove "." and ".." without resolving symbolic
+    links, as .NET does (`NSString.standardizingPath` can drop "/private"). `DocumentSession.saveAs`
+    writes as the C# code does: a new temporary file in the same folder (`O_EXCL`, as
+    `FileMode.CreateNew`), flushed to the disk (`F_FULLFSYNC`, as .NET's `Flush(true)` on macOS),
+    then renamed over the file (`File.Move` with `overwrite`). Where C# throws an `IOException` or
+    `UnauthorizedAccessException`, Swift throws Foundation's `CocoaError` with the path, so the app
+    can show its description.
 
 ## Tests
 
-- `ConformanceTests` runs every case in `conformance/cases` as `conformance/README.md` describes.
-- `CorpusSyntaxTests` checks, until the document session is ported, what PaperKnife's own reader
-  observes in every case: each page's decoded content and fonts.
+- `ConformanceTests` runs every case in `conformance/cases` through `DocumentSession` as the
+  Windows app's `ConformanceTests` does, records what it observes as `CorpusRecorder` does, and
+  compares the record with the case as `conformance/README.md` says: the same keys in the same
+  order, numbers within 0.011, everything else exact, and steps within their `maxMilliseconds`.
+  The README's rules for systems other than Windows (the bounds of runs whose font isn't
+  embedded, and the content of pages with such runs) are `PlatformDifferences`, the one place
+  that relaxes the comparison; CI's log notes every value they let differ.
 - Unit tests port the Windows tests the corpus doesn't cover (file syntax, Type 1 fonts, PDF
-  tools), and `DotNetSupportTests` checks the helpers above against values computed with .NET.
+  tools, memory use, saving), and `DotNetSupportTests` checks the helpers above against values
+  computed with .NET.
