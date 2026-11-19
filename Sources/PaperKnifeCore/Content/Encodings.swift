@@ -131,35 +131,35 @@ enum Encodings {
 
     /// The text a glyph name stands for (Adobe Glyph List conventions), or nil.
     static func glyphToUnicode(_ name: String) -> String? {
-            glyphToUnicodeUnits(name).map { String(units: $0) }
-        }
+        glyphToUnicodeUnits(name).map { String(units: $0) }
+    }
 
-        /// `glyphToUnicode` in UTF-16 code units, which C# joins as chars: the halves of a surrogate pair
-        /// named apart ("uniD835_uniDC00") make one character. A half left alone becomes U+FFFD, as
-        /// Swift strings can't hold one, as C#'s can.
-        private static func glyphToUnicodeUnits(_ name: String) -> [UInt16]? {
+    /// `glyphToUnicode` in UTF-16 code units, which C# joins as chars: the halves of a surrogate pair
+    /// named apart ("uniD835_uniDC00") make one character. A half left alone becomes U+FFFD, as
+    /// Swift strings can't hold one, as C#'s can.
+    private static func glyphToUnicodeUnits(_ name: String) -> [UInt16]? {
         var name = name
         if let dot = name.ordinalIndexOf("."), dot > 0 {
             name = name.substring(0, dot)
         }
 
         if name.utf16.contains(0x5F) {
-                let parts = name.split(onUnit: 0x5F).map(glyphToUnicodeUnits)
-                return parts.allSatisfy({ $0 != nil }) ? parts.flatMap { $0! } : nil
+            let parts = name.split(onUnit: 0x5F).map(glyphToUnicodeUnits)
+            return parts.allSatisfy({ $0 != nil }) ? parts.flatMap { $0! } : nil
         }
 
         if let known = glyphUnicode[name] {
-                return known.units
+            return known.units
         }
 
         let units = name.units
         if units.count == 7 && name.ordinalHasPrefix("uni"), let bmp = DotNetParse.hexInt32(units[3...]) {
-                return [UInt16(truncatingIfNeeded: bmp)]
+            return [UInt16(truncatingIfNeeded: bmp)]
         }
 
         if units.count >= 5 && units.count <= 7 && units[0] == 0x75, let scalar = DotNetParse.hexInt32(units[1...]),
             scalar <= 0x10FFFF && (scalar < 0xD800 || scalar > 0xDFFF) {
-                return DotNetChar.convertFromUtf32(scalar).units
+            return DotNetChar.convertFromUtf32(scalar)?.units
         }
 
         return nil
