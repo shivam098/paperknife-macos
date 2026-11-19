@@ -116,8 +116,9 @@ these rules everywhere.
     `DotNetPath`'s: they make a path absolute and remove "." and ".." without resolving symbolic
     links, as .NET does (`NSString.standardizingPath` can drop "/private"). `DocumentSession.saveAs`
     writes as the C# code does: a new temporary file in the same folder (`O_EXCL`, as
-    `FileMode.CreateNew`), flushed to the disk (`F_FULLFSYNC`, as .NET's `Flush(true)` on macOS),
-    then renamed over the file (`File.Move` with `overwrite`). Where C# throws an `IOException` or
+    `FileMode.CreateNew`), flushed to the disk as .NET's `Flush(true)` does on macOS
+    (`F_FULLFSYNC`, or `fsync` where the file system lacks it), then renamed over the file
+    (`File.Move` with `overwrite`). Where C# throws an `IOException` or
     `UnauthorizedAccessException`, Swift throws Foundation's `CocoaError` with the path, so the app
     can show its description.
 

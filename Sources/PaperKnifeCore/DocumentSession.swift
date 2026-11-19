@@ -914,8 +914,19 @@ public final class DocumentSession {
         let file = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
         try snapshot.writeTo(file)
 
-        // .NET flushes to disk on macOS with F_FULLFSYNC; file systems without it take fsync.
-        if fcntl(descriptor, F_FULLFSYNC) != 0 && fsync(descriptor) != 0 {
+        // .NET's FlushToDisk on macOS: F_FULLFSYNC, or fsync where the file system lacks it; a
+        // special file that can't be synchronized has nothing to flush.
+        var result: Int32
+        repeat {
+            result = fcntl(descriptor, F_FULLFSYNC)
+        } while result < 0 && errno == EINTR
+        if result < 0 {
+            repeat {
+                result = fsync(descriptor)
+            } while result < 0 && errno == EINTR
+        }
+
+        if result < 0 && errno != EROFS && errno != EINVAL && errno != ENOTSUP {
             throw fileError(errno, path)
         }
 
