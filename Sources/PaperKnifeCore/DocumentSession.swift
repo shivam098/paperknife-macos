@@ -28,6 +28,13 @@ public final class DocumentSession {
         self.filePath = filePath
     }
 
+    /// C# disposes a session only when asked to; Swift has no `using`, so a session no longer
+    /// referenced is disposed too, as `PdfDocument` is (its cached pages refer to it, so it isn't
+    /// released on its own while the session holds it).
+    deinit {
+        dispose()
+    }
+
     /// The file this session was opened from or last saved to, if any.
     public private(set) var filePath: String?
 
