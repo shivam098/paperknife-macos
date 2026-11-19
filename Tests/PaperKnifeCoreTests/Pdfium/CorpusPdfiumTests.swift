@@ -25,6 +25,15 @@ final class CorpusPdfiumTests: XCTestCase {
         let description: String
     }
 
+    /// Values that differ for a reason outside the port, by case: PDFium draws text in a font that
+    /// is neither embedded nor one of the 14 standard fonts (which PDFium carries) with a font of
+    /// the system it runs on, so the ink of such text, and with it its bounds, depends on the
+    /// fonts Windows and macOS have. The rest of these cases must still be the same.
+    private static let platformDifferences: [String: Set<String>] = [
+        // "中文" in STSong-Light, which isn't embedded.
+        "content-delete-cjk-text": ["$.initial.pages[0].runs[2].bounds"],
+    ]
+
     func testStoredCases_GiveTheStoredPagesAndRuns() throws {
         let root = try Self.repositoryRoot()
         let cases = root.appendingPathComponent("conformance").appendingPathComponent("cases")
@@ -35,8 +44,10 @@ final class CorpusPdfiumTests: XCTestCase {
 
         var failed = 0
         for name in names {
+            var notes: [String] = []
             do {
-                if let difference = try Self.check(cases.appendingPathComponent(name), root) {
+                let allowed = Self.platformDifferences[String(name.dropLast(5))] ?? []
+                if let difference = try Self.check(cases.appendingPathComponent(name), root, allowed, &notes) {
                     failed += 1
                     XCTFail("cases/\(name): \(difference)")
                 }
@@ -44,13 +55,18 @@ final class CorpusPdfiumTests: XCTestCase {
                 failed += 1
                 XCTFail("cases/\(name): \(error)")
             }
+
+            for note in notes {
+                print("cases/\(name): platform difference: \(note)")
+            }
         }
 
         print("Conformance corpus: \(names.count - failed) of \(names.count) cases give the stored pages and runs.")
     }
 
-    /// The first difference between a case's stored initial pages and what the PDFium layer reads.
-    private static func check(_ file: URL, _ root: URL) throws -> String? {
+    /// The first difference between a case's stored initial pages and what the PDFium layer reads,
+    /// apart from the `allowed` values, whose differences are noted.
+    private static func check(_ file: URL, _ root: URL, _ allowed: Set<String>, _ notes: inout [String]) throws -> String? {
         guard let stored = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any],
             let document = stored["document"] as? String,
             let initial = stored["initial"] as? [String: Any],
@@ -84,7 +100,7 @@ final class CorpusPdfiumTests: XCTestCase {
 
         let expected = Json.object(["pageCount": json(initial["pageCount"]), "pages": .array(expectedPages)])
         let observed = Json.object(["pageCount": .number(Double(pageCount)), "pages": .array(observedPages)])
-        return difference(expected, observed, "$.initial").map { "\($0) (\(document))" }
+        return difference(expected, observed, "$.initial", allowed, &notes).map { "\($0) (\(document))" }
     }
 
     /// A run as `CorpusRecorder.Run` records it.
@@ -132,8 +148,17 @@ final class CorpusPdfiumTests: XCTestCase {
 
     /// The first place two corpus values differ, as `ConformanceTests.Difference` finds it: objects
     /// have the same keys, arrays the same items, numbers differ by at most the tolerance, and text
-    /// is the same code units.
-    private static func difference(_ expected: Json, _ actual: Json, _ path: String) -> String? {
+    /// is the same code units. A difference at an `allowed` path is noted instead.
+    private static func difference(_ expected: Json, _ actual: Json, _ path: String, _ allowed: Set<String>, _ notes: inout [String]) -> String? {
+        if allowed.contains(path) {
+            var ignored: [String] = []
+            if difference(expected, actual, path, [], &ignored) != nil {
+                notes.append("\(path) is \(describe(actual)), not \(describe(expected))")
+            }
+
+            return nil
+        }
+
         switch (expected, actual) {
         case (.null, .null):
             return nil
@@ -143,7 +168,7 @@ final class CorpusPdfiumTests: XCTestCase {
                     return "\(path).\(key) is \(a[key] == nil ? "unexpected" : "missing")"
                 }
 
-                if let found = difference(x, y, "\(path).\(key)") {
+                if let found = difference(x, y, "\(path).\(key)", allowed, &notes) {
                     return found
                 }
             }
@@ -155,7 +180,7 @@ final class CorpusPdfiumTests: XCTestCase {
             }
 
             for i in 0..<a.count {
-                if let found = difference(a[i], b[i], "\(path)[\(i)]") {
+                if let found = difference(a[i], b[i], "\(path)[\(i)]", allowed, &notes) {
                     return found
                 }
             }
