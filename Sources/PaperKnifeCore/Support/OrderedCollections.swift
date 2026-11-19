@@ -112,7 +112,7 @@ struct OrderedSet<Element: Hashable>: Sequence {
     mutating func remove(_ element: Element) -> Bool { storage.removeValue(forKey: element) != nil }
 
     func makeIterator() -> AnyIterator<Element> {
-        var iterator = storage.makeIterator()
+        let iterator = storage.makeIterator()
         return AnyIterator { iterator.next()?.key }
     }
 }
