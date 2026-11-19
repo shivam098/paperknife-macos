@@ -108,6 +108,7 @@ struct PageCanvas: View {
                     if let page = model.page {
                         ZStack(alignment: .topLeading) {
                             Image(page.image, scale: page.scale, label: Text("Page"))
+                                .accessibilityIdentifier("page")
                                 .gesture(SpatialTapGesture().onEnded { value in
                                     Task { await model.click(at: value.location) }
                                 })
