@@ -256,8 +256,12 @@ private enum CorpusRecorder {
             let started = DispatchTime.now().uptimeNanoseconds
             let outcome = try perform(step, session, attachments)
             let elapsed = Int((DispatchTime.now().uptimeNanoseconds - started) / 1_000_000)
-            if let limit = step.maxMilliseconds, elapsed > limit {
-                throw CorpusError("\(corpusCase.id) step \(i + 1) took \(elapsed) ms, more than \(limit) ms.")
+            if let limit = step.maxMilliseconds {
+                if elapsed > limit {
+                    throw CorpusError("\(corpusCase.id) step \(i + 1) took \(elapsed) ms, more than \(limit) ms.")
+                }
+
+                print("cases/\(corpusCase.id).json: step \(i + 1) took \(elapsed) ms, within its limit of \(limit) ms.")
             }
 
             let after = try state(session, &history, i + 1, &decoded)
