@@ -1,6 +1,35 @@
+import Foundation
+import PaperKnifeCore
 import SwiftUI
 
 @main
+enum Main {
+    static func main() {
+        if CommandLine.arguments.dropFirst().first == "--self-check" {
+            exit(selfCheck())
+        }
+
+        PaperKnifeApp.main()
+    }
+
+    /// Checks, without opening a window, that this copy of the app works (see `SelfCheck`).
+    private static func selfCheck() -> Int32 {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "(not in an app bundle)"
+        #if arch(arm64)
+        let architecture = "Apple silicon"
+        #else
+        let architecture = "Intel"
+        #endif
+        print("PaperKnife \(version) self-check on \(architecture), macOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
+        print("App: \(Bundle.main.bundlePath)")
+        let fonts = Bundle.main.resourceURL!.appendingPathComponent("Fonts", isDirectory: true)
+        let result = SelfCheck.run(fonts: fonts)
+        result.lines.forEach { print($0) }
+        print(result.passed ? "Passed." : "Failed.")
+        return result.passed ? 0 : 1
+    }
+}
+
 struct PaperKnifeApp: App {
     var body: some Scene {
         WindowGroup {

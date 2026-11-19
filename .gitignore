@@ -13,6 +13,7 @@ xcuserdata/
 Packages/
 
 # Outputs and signing material (never commit certificates or profiles)
+artifacts/
 *.app
 *.dmg
 *.pkg

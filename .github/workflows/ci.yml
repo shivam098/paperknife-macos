@@ -2,18 +2,31 @@ name: CI
 
 on:
   push:
+    branches: ['**']
   pull_request:
   workflow_dispatch:
+  # The Release workflow runs this one with the version it publishes.
+  workflow_call:
+    inputs:
+      version:
+        description: The version to package, such as 0.1.0
+        type: string
+        required: true
 
 permissions:
   contents: read
 
 jobs:
-  build:
-    runs-on: macos-15
+  test:
+    name: Test on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Show the toolchain
         run: |
@@ -35,3 +48,56 @@ jobs:
 
       - name: Test
         run: swift test
+
+  package:
+    name: Package
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build, check and pack the app
+        env:
+          VERSION: ${{ inputs.version || '0.0.0-dev' }}
+        run: scripts/package-app.sh "$VERSION"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: paperknife-mac-release
+          path: artifacts/release/
+          if-no-files-found: error
+
+  # The package job checks the app on Apple silicon with the newest macOS; these run the files a
+  # user downloads on an older macOS and on Intel.
+  check:
+    name: Check the app on ${{ matrix.os }}
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: paperknife-mac-release
+          path: release
+
+      - name: Check the checksums
+        working-directory: release
+        run: shasum -a 256 -c SHA256SUMS.txt
+
+      - name: Run the app from the disk image
+        run: |
+          hdiutil attach -nobrowse -readonly -mountpoint /tmp/PaperKnife release/PaperKnife-*-mac.dmg
+          ls -l /tmp/PaperKnife
+          codesign --verify --strict --verbose=2 /tmp/PaperKnife/PaperKnife.app
+          /tmp/PaperKnife/PaperKnife.app/Contents/MacOS/PaperKnife --self-check
+          hdiutil detach /tmp/PaperKnife
+
+      - name: Run the app from the ZIP
+        run: |
+          ditto -x -k release/PaperKnife-*-mac.zip unzipped
+          codesign --verify --strict --verbose=2 unzipped/PaperKnife.app
+          unzipped/PaperKnife.app/Contents/MacOS/PaperKnife --self-check

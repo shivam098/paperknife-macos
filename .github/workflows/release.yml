@@ -1,0 +1,50 @@
+name: Release
+
+# Pushing a tag such as v0.1.0 runs the CI workflow with that version (the tests, then the app,
+# checked on Apple silicon and Intel), then publishes a GitHub release with the disk image, the
+# ZIP and their checksums. To build the files without publishing, run the CI workflow from the
+# Actions tab and download its artifact.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    uses: ./.github/workflows/ci.yml
+    with:
+      version: ${{ github.ref_name }}
+
+  publish:
+    name: Publish
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: paperknife-mac-release
+          path: release
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          args=(release create "$TAG" release/* --title "PaperKnife for Mac ${TAG#v}" --verify-tag)
+          if [ -f "docs/releases/$TAG.md" ]; then
+            args+=(--notes-file "docs/releases/$TAG.md")
+          else
+            args+=(--generate-notes)
+          fi
+          if [[ "$TAG" == *-* ]]; then
+            args+=(--prerelease)
+          fi
+          gh "${args[@]}"
