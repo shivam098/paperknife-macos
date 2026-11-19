@@ -1,43 +1,25 @@
 # PaperKnife for Mac — roadmap
 
-macOS development starts after Windows milestone M1, so it can reuse a proven editing model and
-the shared test corpus. Each milestone ends with a notarized build.
+## Done in 0.5.1
 
-## X0 — Foundation
+- A Swift package with the engine of PaperKnife for Windows, ported line by line, which passes
+  every case of the shared conformance corpus.
+- The app: open PDFs (also password-protected ones), select text by clicking it, edit or delete
+  it with verification and a clear reason when an edit is refused, rotate, delete and add pages,
+  undo and redo, Save As.
+- A universal app for Apple silicon and Intel, packed as a disk image and a ZIP by CI from a tag.
 
-- Xcode project for a sandboxed SwiftUI document-based app, Apache-2.0 notices and an
-  acknowledgements window, CI on macOS that builds the app and runs tests.
-- A script that downloads the pinned universal PDFium build, checks its checksum and packages it.
-- Open PDFs from Finder, the Open dialog or drag and drop (including password-protected files);
-  view them with PDFKit.
-- A CI check that the app's entitlements don't include network access.
+## Next
 
-## X1 — Verified text editing
+- Developer ID signing and notarization, so macOS opens the app without a warning, and the App
+  Sandbox without the network entitlement, so macOS itself keeps PaperKnife offline.
+- A thumbnail sidebar with drag to reorder; extract, merge and split, including dragging pages
+  between documents.
 
-- Port the Windows editing model: immutable snapshots, transactional edits, verification
-  (character support, round trip, object counts, pixel comparison), undo and redo through the
-  standard Edit menu.
-- Click text to select it, edit it, see a clear explanation when an edit is refused.
-- Run the shared corpus and compare results with Windows.
-
-## X2 — Pages
-
-- Thumbnail sidebar with drag to reorder, rotate, delete, extract, merge and split, including
-  dragging pages between documents.
-
-## X3 — Annotations and forms
+## Later
 
 - Highlights, notes, shapes and form filling.
-
-## X4 — Toolbox
-
 - Compress, images to PDF and PDF to images; import from a scanner or iPhone with Continuity
   Camera.
-
-## X5 — Text recognition
-
 - Make scanned pages searchable with the Vision framework, on the device.
-
-## Distribution
-
-- Mac App Store, plus a notarized download for people who prefer not to use the store.
+- The Mac App Store, alongside the download.

@@ -3,32 +3,51 @@
 **An offline, open-source PDF editor for the Mac.** Part of [PaperKnife](https://github.com/shivam098/paperknife-windows):
 your documents never leave your computer — no uploads, no account, no telemetry.
 
-> **Status: planning.** No app code yet. Windows is the lead implementation; macOS development
-> starts once the editing model and shared test corpus are proven there (Windows milestone M1).
-> See the [roadmap](docs/ROADMAP.md) and [architecture plan](docs/ARCHITECTURE.md).
+## Download
 
-## Planned features
+Download `PaperKnife-<version>-mac.dmg` from the
+**[Releases page](https://github.com/shivam098/paperknife-macos/releases/latest)**, open it and drag
+PaperKnife to Applications. It runs on macOS 13 (Ventura) or later, on Apple silicon and Intel Macs.
+
+PaperKnife isn't signed with an Apple Developer ID yet, so the first time you open it, macOS says
+it can't check it for malicious software. To open it anyway, once:
+
+- on macOS 15 (Sequoia) or later, try to open it, then go to **System Settings > Privacy &
+  Security** and select **Open Anyway**;
+- on macOS 13 or 14, Control-click PaperKnife in Applications, choose **Open**, then **Open**.
+
+To check a download, compare `shasum -a 256 <file>` with `SHA256SUMS.txt` on the release.
+
+## What it does
 
 The same promises as every PaperKnife app ([product principles](https://github.com/shivam098/paperknife-windows/blob/main/docs/PRODUCT.md)):
 
-- Edit existing text in place, keeping the original font, size, position and color.
-- Verify every change before keeping it, and refuse with a clear reason instead of damaging the
+- **Edit text in place.** Click any text to select its line or table cell, type, and press Return.
+  PaperKnife keeps the original font, size, position and color, and changes only the characters
+  you changed.
+- **Verified edits.** After every edit PaperKnife reads the result again and compares the whole
+  page; if anything else would change, it refuses the edit and says why, instead of damaging the
   document.
-- Organize pages: rotate, delete, reorder, merge and split, including dragging pages between
-  windows.
-- Later: annotations, form filling, compression and on-device text recognition.
+- **Hard PDFs too:** PDFs that draw every letter on its own, PDFs saved from browsers, and LaTeX
+  PDFs, where it can even add letters the PDF's fonts didn't contain.
+- **Pages:** rotate, delete and add pages from another PDF. Undo and redo, and Save As.
 
-## Planned technology
+It runs the engine of PaperKnife for Windows, ported line by line, and passes the same
+[conformance tests](conformance/README.md), so it edits the same PDFs the same way. Later:
+reordering, extracting and merging pages, annotations, forms and text recognition (see the
+[roadmap](docs/ROADMAP.md)).
+
+## Technology
 
 | Area | Choice |
 |---|---|
-| Language and UI | Swift, SwiftUI with AppKit where needed, a document-based app with menus, multiple windows and keyboard shortcuts |
-| Viewing | PDFKit |
-| Editing and verification | [PDFium](https://pdfium.googlesource.com/pdfium/) from the [pdfium-binaries](https://github.com/bblanchon/pdfium-binaries) universal macOS build |
-| Privacy | App Sandbox without the network entitlement: macOS itself prevents the app from going online |
-| Distribution | Mac App Store and a notarized download |
+| Language and UI | Swift: an AppKit window with SwiftUI views, built as a universal app (Apple silicon and Intel) |
+| PDF engine | PaperKnife's engine, ported from PaperKnife for Windows ([porting rules](docs/PORTING.md)), on [PDFium](https://pdfium.googlesource.com/pdfium/) from the [pdfium-binaries](https://github.com/bblanchon/pdfium-binaries) universal build |
+| Tests | The shared [conformance corpus](conformance/README.md), run on macOS 15 and 26 in CI, which also opens and edits a PDF in the packaged app |
+| Privacy | No networking code. The app isn't sandboxed yet; the App Sandbox without network access is planned together with notarization |
 
-Building requires a Mac with Xcode.
+See the [architecture](docs/ARCHITECTURE.md). Building needs a Mac with Xcode or the Swift
+toolchain; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Contributing
 
