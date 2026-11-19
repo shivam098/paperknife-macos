@@ -1,4 +1,5 @@
 import CPDFium
+import CZlib
 import Foundation
 
 /// Checks that PaperKnife works where it is installed: PDFium loads and reads a document, zlib
@@ -17,10 +18,11 @@ public enum SelfCheck {
             passed = passed && ok
         }
 
-        let pages = Toolchain.pdfiumPageCount(minimalPdf)
+        let pages = pageCount(minimalPdf)
         check(pages == 1, "PDFium reads a one-page document (pages: \(pages.map(String.init) ?? "none, it can't open it"))")
         lines.append("      PDFium is loaded from \(pdfiumPath)")
-        check(!Toolchain.zlibVersion.isEmpty, "zlib \(Toolchain.zlibVersion)")
+        let zlib = String(cString: zlibVersion())
+        check(!zlib.isEmpty, "zlib \(zlib)")
 
         for (family, sample) in [("amsfonts", "cmr10.pfb"), ("cm-super", "sfrm1000.pfb"), ("lm", "lmr10.pfb")] {
             let folder = fonts.appendingPathComponent(family, isDirectory: true)
@@ -33,6 +35,19 @@ public enum SelfCheck {
         let entries = (try? String(contentsOf: glyphList, encoding: .utf8))?.split(whereSeparator: \.isNewline) ?? []
         check(entries.contains("A;0041"), "The Adobe Glyph List (\(entries.count) lines) in \(glyphList.path)")
         return (lines, passed)
+    }
+
+    /// The page count of a PDF as the engine reads it, or nil when it can't open it.
+    private static func pageCount(_ data: Data) -> Int? {
+        guard let snapshot = try? PdfSnapshot.fromBytes(data), let document = try? PdfDocument.load(snapshot) else {
+            return nil
+        }
+
+        defer {
+            document.dispose()
+        }
+
+        return try? document.pageCount
     }
 
     /// The file PDFium's code was loaded from.
