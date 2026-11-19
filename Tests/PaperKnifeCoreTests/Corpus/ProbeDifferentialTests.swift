@@ -47,13 +47,13 @@ final class ProbeDifferentialTests: XCTestCase {
     // MARK: - Damaged inputs (the probe's Fuzz.cs, call for call)
 
     private static let maxFuzzedDocument = 100_000
-    private static let documentMutations = 8
+    private static let documentMutations = 16
     private static let contentPages = 2
-    private static let contentMutations = 6
+    private static let contentMutations = 12
     private static let contentFonts = 2
-    private static let fontMutations = 40
-    private static let filterCases = 800
-    private static let syntaxCases = 1500
+    private static let fontMutations = 60
+    private static let filterCases = 2000
+    private static let syntaxCases = 4000
     private static let golden: UInt64 = 0x9E37_79B9_7F4A_7C15
 
     private static let alphabet = Array("()<>[]{}/%#\\ \n\r\t0123456789.+-abcdefRTnulsojmBIDEWHQq'\"".utf8) + [0x00, 0x80, 0xFF]
@@ -93,7 +93,7 @@ final class ProbeDifferentialTests: XCTestCase {
         func add(_ key: String, _ body: String) {
             let inserted = seen.insert(key).inserted
             XCTAssertTrue(inserted, "\(key) twice")
-            if expected[key] != Self.hash(Array(body.utf8)) {
+            if expected[key] != String(Self.hash(Array(body.utf8)).prefix(16)) {
                 failures.append(key)
                 if failures.count <= 6 {
                     print("== \(key) differs from \(expected[key] ?? "nothing"):\n\(body)== end of \(key)")
@@ -170,10 +170,161 @@ final class ProbeDifferentialTests: XCTestCase {
             add("syntax\(c)", s.text)
         }
 
+        var cmaps = Self.corpusCMaps(documents)
+        cmaps += Self.syntheticCMaps().map { Array($0.utf8) }
+        let lone = Set((expected["~lone"] ?? "").split(separator: " ").map { String($0) })
+        for k in 0..<cmaps.count {
+            for m in 0..<Self.cmapMutations {
+                let random = Random64(Self.seed(k + 20000, m))
+                let cmap = m == 0 ? cmaps[k] : Self.mutate(cmaps[k], random, cmaps[k].count)
+                Self.progress("cmap\(k)#\(m)")
+                let s = Builder()
+                Self.fuzzCMap(s, cmap, lone.contains("cmap\(k)#\(m)"))
+                add("cmap\(k)#\(m)", s.text)
+            }
+        }
+
+        let expectedKeys = Set(expected.keys).subtracting(["~lone"])
         XCTAssertEqual(Self.alphabet.count, 57)
         XCTAssertEqual(failures.count, 0, failures.prefix(40).joined(separator: "\n"))
-        XCTAssertEqual(Set(expected.keys).subtracting(seen).sorted(), [])
-        XCTAssertEqual(seen.count, expected.count)
+        XCTAssertEqual(expectedKeys.subtracting(seen).sorted(), [])
+        XCTAssertEqual(seen.count, expectedKeys.count)
+    }
+
+    private static let cmapLimit = 60
+    private static let cmapMutations = 16
+
+    private static let cmapFonts = [
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /ToUnicode 3 0 R >>",
+        "<< /Type /Font /Subtype /Type0 /BaseFont /X /Encoding /Identity-H /ToUnicode 3 0 R "
+            + "/DescendantFonts [<< /Type /Font /Subtype /CIDFontType2 /BaseFont /X /DW 500 /W [1 [600 700] 50 60 800] >>] >>",
+    ]
+
+    /// The first distinct ToUnicode CMaps of the corpus, by document, page and font name.
+    private static func corpusCMaps(_ documents: [URL]) -> [[UInt8]] {
+        var cmaps: [[UInt8]] = []
+        var seen = Set<String>()
+        for url in documents {
+            do {
+                var problem: String?
+                guard let file = try PdfFile.tryOpen([UInt8](Data(contentsOf: url)), &problem), !file.isEncrypted,
+                      let pages = try file.getPages() else {
+                    continue
+                }
+
+                for page in pages {
+                    guard let fonts = try file.resolveDict(page.resources?["Font"]) else {
+                        continue
+                    }
+
+                    for name in fonts.entries.keys.stableSorted(by: { String.ordinalLess($0, $1) }) {
+                        if let font = try file.resolveDict(fonts[name]), let stream = try file.resolve(font["ToUnicode"]) as? CosStream,
+                           let data = try file.decodeStream(stream), cmaps.count < cmapLimit, seen.insert(hash(data)).inserted {
+                            cmaps.append(data)
+                        }
+                    }
+                }
+            } catch {
+            }
+        }
+
+        return cmaps
+    }
+
+    /// A CMap read as the ToUnicode map of a simple font and of a Type 0 font. Where the probe met
+    /// unpaired surrogates (`lone`), which a Swift string holds as U+FFFD, the fonts are left out,
+    /// as the probe leaves them out.
+    private static func fuzzCMap(_ s: Builder, _ cmap: [UInt8], _ lone: Bool) {
+        do {
+            var problem: String?
+            let opened = try PdfFile.tryOpen(miniPdf(cmap), &problem)
+            s.add("open \(B(opened != nil)) \(S(problem))\n")
+            guard let file = opened else {
+                return
+            }
+
+            guard let map = try PdfFontInfo.toUnicode(file, CosRef(3, 0)) else {
+                s.add("map null\n")
+                return
+            }
+
+            var entries = ""
+            for (code, text) in map {
+                entries += "\(code)=\(S(text));"
+            }
+
+            s.add("map \(map.count) \(hash(Array(entries.utf8)))\n")
+            if lone {
+                s.add(map.values.contains { $0.units.contains(0xFFFD) } ? "lone\n" : "no U+FFFD\n")
+                return
+            }
+
+            for font in cmapFonts {
+                let dict = PdfObjectParser.read(PdfLexer(Array(font.utf8))) as! CosDict
+                info(s, try PdfFontInfo.load(file, dict))
+            }
+        } catch {
+            s.add("throws \(name(of: error))\n")
+        }
+    }
+
+    /// CMaps written for the parts of ReadToUnicode the corpus doesn't reach.
+    private static func syntheticCMaps() -> [String] {
+        var budget = "begincmap\n300 beginbfrange\n"
+        for r in 0..<300 {
+            budget += "<\(hex(UInt64(r * 1000), 8))> <\(hex(UInt64(r * 1000 + 999), 8))> <4E00>\n"
+        }
+
+        budget += "endbfrange\nendcmap\n"
+        return [
+            "/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CMapName /A def /CMapType 2 def\n"
+                + "1 begincodespacerange <00> <FF> endcodespacerange\n"
+                + "5 beginbfchar <01> <0041> <02> <00420043> <20> <0020> <41> <D835DC00> <42> <00660069> endbfchar\n"
+                + "2 beginbfrange <61> <7A> <0061> <80> <84> [<00E9> <00E8> <> <0066006C> (x)] endbfrange\n"
+                + "endcmap CMapName currentdict /CMap defineresource pop end end\n",
+            "begincmap\n1 begincodespacerange <0000> <FFFF> endcodespacerange\n"
+                + "3 beginbfrange <0000> <00FF> <0000> <0100> <0105> <00FE> <0200> <0210> <D835DD00> endbfrange\n"
+                + "2 beginbfchar <0003> <0020> <0024> <00660069> endbfchar\nendcmap\n",
+            "begincmap\n3 beginbfrange <0000> <752F> <4E00> <7530> <EA5F> <4E00> <EA60> <FFFF> <0041> endbfrange\nendcmap\n",
+            "begincmap\n4 beginbfchar <41> <004> <42> <> <43> (AB) <44> /Name endbfchar\n"
+                + "3 beginbfrange <45> <47> /name <48> <49> [<0041> 12 <0042>] <4A> 7 <0058> endbfrange\nendcmap\n",
+            "begincmap\n3 beginbfchar <010203> <0058> <0102030405> <0059> <0001> <005A> endbfchar\n"
+                + "1 beginbfrange <01020300> <01020310> <0030> endbfrange\nendcmap\n",
+            "begincmap beginbfchar <41> <0061> beginbfrange <42> <44> <0062> endbfrange <45> <0065> beginbfchar % comment <46>\n"
+                + "<0066> endbfchar ] >> << beginbfchar <47> <0067>",
+            "begincmap\n2 beginbfchar <30> <D835DC9C> <31> <D83DDE00> endbfchar\n"
+                + "1 beginbfrange <32> <35> [<D835DCB6> <D835DCB7> <0041D835DCB8> <D800DC00>] endbfrange\n"
+                + "1 beginbfrange <36> <39> <D835DD38> endbfrange\nendcmap\n",
+            "begincmap\n3 beginbfrange <50> <40> <0041> <0000> <FFFFFFFF> <0041> <60> <62> [<0061>] endbfrange\nendcmap\n",
+            budget,
+        ]
+    }
+
+    /// A file whose object 3 is a stream holding `data`.
+    private static func miniPdf(_ data: [UInt8]) -> [UInt8] {
+        var output: [UInt8] = []
+        var offsets: [Int] = []
+        func write(_ text: String) {
+            output += Array(text.utf8)
+        }
+
+        write("%PDF-1.7\n")
+        offsets.append(output.count)
+        write("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
+        offsets.append(output.count)
+        write("2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n")
+        offsets.append(output.count)
+        write("3 0 obj\n<< /Length \(data.count) >>\nstream\n")
+        output += data
+        write("\nendstream\nendobj\n")
+        let xref = output.count
+        write("xref\n0 4\n0000000000 65535 f \n")
+        for offset in offsets {
+            write("\(DotNetFormat.d(offset, 10)) 00000 n \n")
+        }
+
+        write("trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n\(xref)\n%%EOF\n")
+        return output
     }
 
     /// Unbuffered, so that a crash shows which case it was in.
