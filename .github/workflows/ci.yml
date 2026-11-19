@@ -101,3 +101,31 @@ jobs:
           ditto -x -k release/PaperKnife-*-mac.zip unzipped
           codesign --verify --strict --verbose=2 unzipped/PaperKnife.app
           unzipped/PaperKnife.app/Contents/MacOS/PaperKnife --self-check
+
+  # A picture of the window with a PDF opened the way Finder opens one, to review the interface.
+  screenshot:
+    name: Screenshot
+    needs: package
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: paperknife-mac-release
+          path: release
+
+      - name: Open a PDF and take a screenshot
+        run: |
+          ditto -x -k release/PaperKnife-*-mac.zip app
+          open -a "$PWD/app/PaperKnife.app" "$PWD/conformance/documents/90f66aab2200.pdf"
+          sleep 10
+          screencapture -x screenshot.png
+          osascript -e 'quit app "PaperKnife"' || true
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: paperknife-mac-screenshot
+          path: screenshot.png
+          if-no-files-found: error

@@ -1,15 +1,21 @@
+import AppKit
 import Foundation
 import PaperKnifeCore
-import SwiftUI
 
 @main
 enum Main {
+    @MainActor
     static func main() {
         if CommandLine.arguments.dropFirst().first == "--self-check" {
             exit(selfCheck())
         }
 
-        PaperKnifeApp.main()
+        let application = NSApplication.shared
+        let delegate = AppDelegate()
+        application.delegate = delegate
+        withExtendedLifetime(delegate) {
+            application.run()
+        }
     }
 
     /// Checks, without opening a window, that this copy of the app works (see `SelfCheck`).
@@ -22,19 +28,17 @@ enum Main {
         #endif
         print("PaperKnife \(version) self-check on \(architecture), macOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
         print("App: \(Bundle.main.bundlePath)")
-        let fonts = Bundle.main.resourceURL!.appendingPathComponent("Fonts", isDirectory: true)
-        let result = SelfCheck.run(fonts: fonts)
+        let result = SelfCheck.run(fonts: AppResources.fonts)
         result.lines.forEach { print($0) }
         print(result.passed ? "Passed." : "Failed.")
         return result.passed ? 0 : 1
     }
 }
 
-struct PaperKnifeApp: App {
-    var body: some Scene {
-        WindowGroup {
-            Text("PaperKnife")
-                .frame(minWidth: 480, minHeight: 320)
-        }
+/// Where the app bundle keeps what the engine reads.
+enum AppResources {
+    /// The fonts PaperKnife draws new letters with, and the Adobe Glyph List.
+    static var fonts: URL {
+        Bundle.main.resourceURL!.appendingPathComponent("Fonts", isDirectory: true)
     }
 }
