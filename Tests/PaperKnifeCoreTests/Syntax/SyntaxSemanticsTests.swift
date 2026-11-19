@@ -74,6 +74,10 @@ final class SyntaxSemanticsTests: XCTestCase {
         XCTAssertEqual(Encodings.glyphToUnicode("uni0041"), "A")
         XCTAssertEqual(Encodings.glyphToUnicode("u1F600"), "\u{1F600}")
         XCTAssertNil(Encodings.glyphToUnicode("uD800"))
+        // C# joins the parts' chars, so the halves of a pair named apart make one character; a half
+        // alone is U+FFFD in a Swift string.
+        XCTAssertEqual(Encodings.glyphToUnicode("uniD835_uniDC00"), "\u{1D400}")
+        XCTAssertEqual(Encodings.glyphToUnicode("uniD835_A"), "\u{FFFD}A")
 
         // From the Adobe Glyph List, which the app reads from its bundle.
         XCTAssertEqual(Encodings.glyphToUnicode("dalethatafpatah"), "\u{05D3}\u{05B2}")
