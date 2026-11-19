@@ -28,7 +28,12 @@ these rules everywhere.
 1. **Strings are UTF-16 in C#.** Wherever C# measures, indexes, slices or iterates a string, or
    looks at its chars, work on UTF-16 code units: `s.units` (`[UInt16]`), `s.length`,
    `s.substring(start, length)`, `String(units:)`. Never use Swift's `count`, `Character` or
-   `String.Index` for C# string logic: they count grapheme clusters.
+   `String.Index` for C# string logic: they count grapheme clusters. A Swift string can't hold an
+   unpaired surrogate, which a C# string can: `String(units:)` makes it U+FFFD. So where C# joins
+   chars or strings that may be halves of a pair, join code units and make the string once (as
+   `Encodings.glyphToUnicode` does). Where a C# string keeps one (a ToUnicode range that steps
+   into the surrogates, a `uniD800` glyph name), the port has U+FFFD instead, and
+   `normalizedFormKC` doesn't throw as .NET's `Normalize` does.
 2. **C# compares strings by code unit (ordinal); Swift by canonical equivalence.** In Swift
    `"\u{E9}" == "e\u{301}"`; in C# they differ. Use `ordinalEquals`, `ordinalCompare`,
    `String.ordinalLess`, `ordinalHasPrefix`, `ordinalHasSuffix`, `ordinalIndexOf`,
@@ -61,8 +66,10 @@ these rules everywhere.
 7. **Formatting and parsing numbers.** `CosWriter.Number` is
    `DotNetMath.formatUpTo10Decimals(DotNetMath.round(value, 10))`, with "-0" written as "0". Parse
    only the syntax the C# code accepts: `DotNetParse.hexInt32` for `AllowHexSpecifier`,
-   `DotNetParse.int32` for `int.TryParse`, and for `double.TryParse` check the same characters the
-   C# lexer allows before calling `Double(_:)`.
+   `DotNetParse.int32` for `int.TryParse`, `DotNetParse.signedInt32` for `AllowLeadingSign` alone,
+   and `DotNetParse.double` for `double.TryParse` with `NumberStyles.Float` (the C# lexer checks
+   the characters of a number first). `ToString("D10")` and `Convert.ToHexString` are
+   `DotNetFormat.d` and `DotNetFormat.hex`; a `(uint)` cast of a double is `DotNetMath.toUInt32`.
 8. **Bytes and text encodings.** Use `[UInt8]` (and `ArraySlice<UInt8>` where C# uses spans) for
    file data. `Encoding.Latin1` is `Latin1.string` and `Latin1.bytes`. Big-endian UTF-16 and UTF-8
    decoding must replace invalid sequences the way .NET does (U+FFFD).
@@ -75,11 +82,24 @@ these rules everywhere.
     `lock (PdfiumLibrary.Sync)` does, because PDFium isn't thread-safe.
 12. **Fonts.** The fonts the Windows app compiles in or ships in `Fonts\` (AMS Computer Modern,
     Latin Modern, CM-Super) and the Adobe Glyph List are files in the app bundle's
-    `Resources/Fonts`. `BundledFonts` reads them from directories the app sets, which tests point
-    at `third_party/`.
+    `Resources/Fonts` (`amsfonts`, `cm-super` and `lm` folders, and `glyphlist.txt`).
+    `BundledFonts.fontDirectories` and `Encodings.glyphListURL` say where they are: by default the
+    bundle, and tests point them at `third_party/`. The folders are searched in turn, each in
+    ordinal order of the paths, which gives the fonts the precedence they have on Windows.
+13. **Reading files.** PaperKnife's own reader (`PdfFile`, `ContentPage`, `PdfFontInfo`,
+    `FontCompletion`) throws where the C# one throws, with the exceptions `DocumentSession` turns
+    into refusals (`IsReadFailure`: `ArgumentException`, `IndexOutOfRangeException`,
+    `InvalidOperationException`, `NullReferenceException`, `OverflowException` and the like).
+    `DotNetThrows` makes each one as the C# expression throws it. Flate data is inflated as .NET's
+    `ZLibStream` inflates it: data zlib refuses is damaged (`StreamFilters.isDamaged`: .NET's
+    `InvalidDataException`, and the `ZLibException` it throws for data that asks for a preset
+    dictionary), truncated data gives what it holds, and bytes after the end are ignored.
+    `Encoding.BigEndianUnicode.GetString` is `Utf16BigEndian.string`.
 
 ## Tests
 
 - `ConformanceTests` runs every case in `conformance/cases` as `conformance/README.md` describes.
+- `CorpusSyntaxTests` checks, until the document session is ported, what PaperKnife's own reader
+  observes in every case: each page's decoded content and fonts.
 - Unit tests port the Windows tests the corpus doesn't cover (file syntax, Type 1 fonts, PDF
   tools), and `DotNetSupportTests` checks the helpers above against values computed with .NET.

@@ -119,10 +119,11 @@ final class SyntaxSemanticsTests: XCTestCase {
         XCTAssertEqual(problem, "The stream's FlateDecode data can't be decoded.")
 
         // A stream that needs a preset dictionary makes zlib return Z_NEED_DICT, for which .NET
-        // throws a ZLibException rather than report damaged data.
-        XCTAssertThrowsError(try StreamFilters.decode([0x78, 0x20, 0, 0, 0, 1][...], ["FlateDecode"], [], &problem)) { error in
-            XCTAssertTrue(error is ZLibException, "\(error)")
-        }
+        // throws a ZLibException, an IOException: StreamFilters treats it as damaged data too.
+        XCTAssertNil(try StreamFilters.decode([0x78, 0x20, 0, 0, 0, 1][...], ["FlateDecode"], [], &problem))
+        XCTAssertEqual(problem, "The stream's FlateDecode data can't be decoded.")
+        XCTAssertNil(try StreamFilters.inflatePrefix([0x78, 0x20, 0, 0, 0, 1][...], 1))
+        XCTAssertEqual(try StreamFilters.inflatePrefix([0x78, 0x20, 0, 0, 0, 1][...], 0), [])
 
         XCTAssertEqual(try StreamFilters.inflatePrefix(compressed[...], 5), Array("Hello".utf8))
     }

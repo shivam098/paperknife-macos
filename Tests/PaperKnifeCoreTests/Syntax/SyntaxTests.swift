@@ -75,6 +75,17 @@ final class SyntaxTests: XCTestCase {
         XCTAssertNotNil(problem)
     }
 
+    func testStreamFilters_TreatFlateDataThatNeedsAPresetDictionaryAsDamaged() throws {
+        // A zlib header asking for a preset dictionary (FDICT), which a PDF can't give, then a
+        // stored block: .NET's ZLibStream throws ZLibException for it, not InvalidDataException.
+        let data: [UInt8] = [0x78, 0xBB, 0, 0, 0, 1, 0x01, 0x01, 0x00, 0xFE, 0xFF, UInt8(ascii: "A")]
+
+        var problem: String?
+        XCTAssertNil(try StreamFilters.decode(data[...], ["FlateDecode"], [], &problem))
+        XCTAssertNotNil(problem)
+        XCTAssertNil(try StreamFilters.inflatePrefix(data[...], 1))
+    }
+
     func testFontInfo_GivesUpQuicklyOnWidthMapsTooLargeToRead() throws {
         let file = try XCTUnwrap(PdfFile.tryOpen(RawPdf.singlePage(RawPdf.baseContent)))
         var widths: [CosObject] = []

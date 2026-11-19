@@ -60,14 +60,14 @@ enum StreamFilters {
 
     /// The first `length` bytes of Flate data (fewer when it is shorter), or nil when it is damaged.
     static func inflatePrefix(_ data: ArraySlice<UInt8>, _ length: Int) throws -> [UInt8]? {
-        guard length >= 0 else {
-            throw DotNetThrows.overflow()
-        }
-
-        let z = try ZLibReader(Array(data))
-        var output = [UInt8](repeating: 0, count: length)
-        var read = 0
         do {
+            let z = try ZLibReader(Array(data))
+            guard length >= 0 else {
+                throw DotNetThrows.overflow()
+            }
+
+            var output = [UInt8](repeating: 0, count: length)
+            var read = 0
             while read < length {
                 let count = try output.withUnsafeMutableBufferPointer { buffer in
                     try z.read(UnsafeMutableBufferPointer(rebasing: buffer[read..<length]))
@@ -79,18 +79,18 @@ enum StreamFilters {
 
                 read += count
             }
-        } catch is ZLibDataError {
+
+            return read == length ? output : Array(output[0..<read])
+        } catch let error where isDamaged(error) {
             return nil
         }
-
-        return read == length ? output : Array(output[0..<read])
     }
 
     private static func inflate(_ data: [UInt8], _ limit: Int) throws -> [UInt8]? {
-        let z = try ZLibReader(data)
-        var output: [UInt8] = []
-        var buffer = [UInt8](repeating: 0, count: 81920)
         do {
+            let z = try ZLibReader(data)
+            var output: [UInt8] = []
+            var buffer = [UInt8](repeating: 0, count: 81920)
             while true {
                 let read = try buffer.withUnsafeMutableBufferPointer { try z.read($0) }
                 if read <= 0 {
@@ -103,12 +103,18 @@ enum StreamFilters {
 
                 output.append(contentsOf: buffer[0..<read])
             }
-        } catch is ZLibDataError {
+
+            return output
+        } catch let error where isDamaged(error) {
             return nil
         }
-
-        return output
     }
+
+    /// Whether zlib refused the data. Data that asks for a preset dictionary, which a PDF can't
+    /// give, makes .NET throw System.IO.Compression.ZLibException, an `IOException` that isn't in
+    /// .NET's public API, rather than `InvalidDataException`. The data is read from memory, so no
+    /// other IOException can occur.
+    private static func isDamaged(_ error: Error) -> Bool { error is ZLibDataError || error is IOException }
 
     private static func predict(_ data: [UInt8]?, _ parameters: CosDict?) -> [UInt8]? {
         let predictor = integer(parameters, "Predictor", 1)
@@ -395,7 +401,7 @@ enum StreamFilters {
     }
 }
 
-/// zlib reported damaged data: .NET's `InvalidDataException`, which StreamFilters catches.
+/// zlib reported damaged data: .NET's `InvalidDataException`, which StreamFilters treats as damaged.
 private struct ZLibDataError: Error {}
 
 /// .NET's `ZLibStream` decompressing a byte array, as StreamFilters reads it: zlib's inflate with
@@ -484,7 +490,8 @@ private final class ZLibReader {
         case Z_DATA_ERROR:
             throw ZLibDataError()
         default:
-            // Z_NEED_DICT among them: .NET throws a ZLibException, which nothing catches as damaged data.
+            // Z_NEED_DICT among them: .NET throws a ZLibException, an IOException, which
+            // StreamFilters treats as damaged data too.
             throw ZLibException(ZLibMessages.forInflate(status))
         }
 
