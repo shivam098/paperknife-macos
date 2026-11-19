@@ -270,7 +270,9 @@ enum Latin1 {
         String(units: bytes.map(UInt16.init))
     }
 
-    /// The bytes of a string; characters past U+00FF become "?", as .NET encodes them.
+    /// The bytes of a string whose characters are all up to U+00FF, which is all the engine encodes
+    /// (PDF syntax written by `CosWriter`). Each character past U+00FF becomes "?", where .NET maps
+    /// some to look-alikes (Ł to "L", ’ to "'"), so never let ported code encode such text.
     static func bytes(_ text: String) -> [UInt8] {
         text.utf16.map { $0 <= 0xFF ? UInt8($0) : 0x3F }
     }

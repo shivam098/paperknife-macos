@@ -77,9 +77,13 @@ these rules everywhere.
    the characters of a number first). `ToString("D10")` and `Convert.ToHexString` are
    `DotNetFormat.d` and `DotNetFormat.hex`; a `(uint)` cast of a double is `DotNetMath.toUInt32`.
 8. **Bytes and text encodings.** Use `[UInt8]` (and `ArraySlice<UInt8>` where C# uses spans) for
-   file data. `Encoding.Latin1` is `Latin1.string` and `Latin1.bytes`. Big-endian UTF-16 and UTF-8
-   decoding must replace invalid sequences the way .NET does (U+FFFD); `Encoding.UTF8.GetString`
-   is `Utf8.string`.
+   file data. `Encoding.Latin1` is `Latin1.string` and `Latin1.bytes`. They agree with .NET for
+   characters up to U+00FF, which is all the engine encodes (PDF syntax written by `CosWriter`:
+   operators, numbers, and names and strings whose characters are bytes). Above U+00FF, .NET maps
+   some characters to look-alikes (Ł to "L", ’ to "'", “ to `"`) where `Latin1.bytes` writes "?";
+   both write "?" for the rest, one per UTF-16 code unit. Never let ported code encode such text.
+   Big-endian UTF-16 and UTF-8 decoding must replace invalid sequences the way .NET does (U+FFFD);
+   `Encoding.UTF8.GetString` is `Utf8.string`.
 9. **Exceptions.** Where C# throws and catches (for example `PdfException`, or the read failures
    `DocumentSession` turns into refusals), Swift throws and catches errors that keep the same
    meaning and messages. They are classes with C#'s hierarchy, so `error is ArgumentException`
