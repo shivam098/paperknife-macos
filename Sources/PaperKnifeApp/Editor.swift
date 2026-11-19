@@ -103,11 +103,18 @@ final class Editor {
         }
     }
 
-    var state: SessionState { SessionState(pageCount: document.pageCount, signatureCount: document.signatureCount) }
+    /// The document's state; an empty one once the document is closed, as on Windows.
+    var state: SessionState {
+        guard let pageCount = try? document.pageCount, let signatureCount = try? document.signatureCount else {
+            return SessionState()
+        }
+
+        return SessionState(pageCount: pageCount, signatureCount: signatureCount)
+    }
 
     func pageSize(_ page: Int) throws -> CGSize {
         let page = try document.getPage(page)
-        return CGSize(width: CGFloat(page.width), height: CGFloat(page.height))
+        return CGSize(width: CGFloat(try page.width), height: CGFloat(try page.height))
     }
 
     func render(_ page: Int, width: Int, height: Int) throws -> PageBitmap {
