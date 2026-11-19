@@ -583,7 +583,9 @@ final class FontCompletion {
         font.usesStandardEncoding ? Encodings.fullStandardName(code) : font.encoding[code]
     }
 
-    private static func comparable(_ text: String) -> String { text.normalizedFormKC.ordinalReplacing("\u{A0}", with: " ") }
+    private static func comparable(_ text: String) throws -> String {
+        try DotNetNormalization.formKC(text).ordinalReplacing("\u{A0}", with: " ")
+    }
 
     private static func integer(_ value: Int) -> CosNumber { CosNumber(Double(value), String(value)) }
 }

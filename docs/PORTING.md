@@ -46,6 +46,9 @@ these rules everywhere.
    UTF-16 code units. `Trim`, `TrimStart` and `TrimEnd` are `dotNetTrim…` (Swift's whitespace set
    differs). `Normalize(FormC)` and `Normalize(FormKC)` are `normalizedFormC` and
    `normalizedFormKC`.
+   .NET's `Normalize` throws an `ArgumentException` for U+FFFE and unpaired surrogates, and C#
+   code relies on it (`DocumentSession` refuses what it can't read): where the C# code can meet
+   such text, use `DotNetNormalization.formC` and `formKC`, which throw it too.
 4. **Ordered collections.** C#'s `Dictionary` and `HashSet` enumerate in insertion order (an entry
    added after a removal takes the freed place); Swift's `Dictionary` and `Set` in no particular
    order. Use `OrderedDictionary` and `OrderedSet` wherever the C# code enumerates a dictionary or
