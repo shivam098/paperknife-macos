@@ -463,18 +463,18 @@ final class EditorModel: ObservableObject {
         let rendering: Rendering
         do {
             rendering = try await perform {
-                let size = editor.pageSize(index)
+                let size = try editor.pageSize(index)
                 let fit = min(pixelsPerPoint, (maxDisplayPixels / (Double(size.width) * Double(size.height))).squareRoot())
                 let width = max(1, Int((Double(size.width) * fit).rounded(.toNearestOrEven)))
                 let height = max(1, Int((Double(size.height) * fit).rounded(.toNearestOrEven)))
-                let runs = editor.textRuns(index).filter { !isBlank($0.text) }
+                let runs = try editor.textRuns(index).filter { !isBlank($0.text) }
                 let box = selection.flatMap { run in
                     run.pageIndex == index ? editor.mapToPixels(index, rect: run.bounds.inflated(by: 1), width: width, height: height) : nil
                 }
 
                 return Rendering(
                     bitmap: try editor.render(index, width: width, height: height),
-                    blockers: editor.editBlockers(index),
+                    blockers: try editor.editBlockers(index),
                     runs: runs,
                     selection: box)
             }

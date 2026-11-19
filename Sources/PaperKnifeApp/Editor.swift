@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import PaperKnifeCore
 
 /// The state of a document session, copied when a command finishes, as PaperKnife for Windows
 /// copies it, so views never read the session while the engine works.
@@ -81,52 +82,74 @@ struct PageBitmap {
 /// PaperKnife's engine as the app uses it: a DocumentSession, ported from PaperKnife for Windows.
 /// Calls can take long, so EditorModel makes them on its engine queue, one at a time.
 ///
-/// Until the port is merged, opening a document fails with a message, so the app can be built
-/// and its window checked.
+/// Until the session is ported, this opens, draws and reads documents with the engine's document
+/// layer, and every command that would change a document fails with a message.
 final class Editor {
-    let filePath: String?
+    private static let notYet = "This build of PaperKnife can show PDFs but can't change them yet."
 
-    private init(filePath: String?) {
+    let filePath: String?
+    private let document: PdfDocument
+
+    private init(filePath: String?, document: PdfDocument) {
         self.filePath = filePath
+        self.document = document
     }
 
     static func open(path: String, password: String?) throws -> Editor {
-        throw EditorError.failed("This build of PaperKnife doesn't include its editing engine yet.")
+        do {
+            return Editor(filePath: path, document: try PdfDocument.load(try PdfSnapshot.fromFile(path), password))
+        } catch let error as PdfException where error.errorCode == .passwordRequired {
+            throw EditorError.passwordRequired
+        }
     }
 
-    var state: SessionState { SessionState() }
+    var state: SessionState { SessionState(pageCount: document.pageCount, signatureCount: document.signatureCount) }
 
-    func pageSize(_ page: Int) -> CGSize { .zero }
+    func pageSize(_ page: Int) throws -> CGSize {
+        let page = try document.getPage(page)
+        return CGSize(width: CGFloat(page.width), height: CGFloat(page.height))
+    }
 
     func render(_ page: Int, width: Int, height: Int) throws -> PageBitmap {
-        throw EditorError.failed("This build of PaperKnife doesn't include its editing engine yet.")
+        let rendered = try document.getPage(page).render(width, height)
+        return PageBitmap(image: try Self.image(rendered), width: rendered.width, height: rendered.height)
     }
 
-    func textRuns(_ page: Int) -> [TextRun] { [] }
+    func textRuns(_ page: Int) throws -> [TextRun] { try document.getPage(page).getTextRuns().map(Self.run) }
 
-    func textRun(_ page: Int, objectIndex: Int) -> TextRun? { nil }
+    /// The text run, or nil when there is none or it can't be read.
+    func textRun(_ page: Int, objectIndex: Int) -> TextRun? { (try? document.getPage(page).tryGetTextRun(objectIndex)).map(Self.run) }
 
-    func hitTest(_ page: Int, width: Int, height: Int, x: Int, y: Int) -> TextRun? { nil }
+    /// The text under the point, or nil when there is none or it can't be read.
+    func hitTest(_ page: Int, width: Int, height: Int, x: Int, y: Int) -> TextRun? {
+        (try? document.getPage(page).hitTestText(width, height, x, y)).map(Self.run)
+    }
 
     /// The rectangle in pixels of a page drawn at this size, or nil when it can't be mapped.
-    func mapToPixels(_ page: Int, rect: PageRect, width: Int, height: Int) -> CGRect? { nil }
+    func mapToPixels(_ page: Int, rect: PageRect, width: Int, height: Int) -> CGRect? {
+        guard let mapped = try? document.getPage(page).mapToPixels(PdfRect(rect.left, rect.bottom, rect.right, rect.top), width, height) else {
+            return nil
+        }
 
-    func editBlockers(_ page: Int) -> [String] { [] }
+        return CGRect(x: mapped.x, y: mapped.y, width: mapped.width, height: mapped.height)
+    }
+
+    func editBlockers(_ page: Int) throws -> [String] { [] }
 
     func replaceText(_ page: Int, objectIndex: Int, text: String) throws -> EditOutcome {
-        throw EditorError.failed("This build of PaperKnife doesn't include its editing engine yet.")
+        throw EditorError.failed(Self.notYet)
     }
 
     func rotatePage(_ page: Int, quarterTurns: Int) throws -> EditOutcome {
-        throw EditorError.failed("This build of PaperKnife doesn't include its editing engine yet.")
+        throw EditorError.failed(Self.notYet)
     }
 
     func deletePage(_ page: Int) throws -> EditOutcome {
-        throw EditorError.failed("This build of PaperKnife doesn't include its editing engine yet.")
+        throw EditorError.failed(Self.notYet)
     }
 
     func appendDocument(path: String) throws -> EditOutcome {
-        throw EditorError.failed("This build of PaperKnife doesn't include its editing engine yet.")
+        throw EditorError.failed(Self.notYet)
     }
 
     func undo() -> Bool { false }
@@ -134,8 +157,31 @@ final class Editor {
     func redo() -> Bool { false }
 
     func saveAs(path: String) throws {
-        throw EditorError.failed("This build of PaperKnife doesn't include its editing engine yet.")
+        throw EditorError.failed(Self.notYet)
     }
 
-    func close() {}
+    func close() { document.dispose() }
+
+    private static func run(_ run: PdfTextRun) -> TextRun {
+        TextRun(
+            pageIndex: run.pageIndex, objectIndex: run.objectIndex, objectCount: run.objectCount, text: run.text,
+            bounds: PageRect(left: run.bounds.left, bottom: run.bounds.bottom, right: run.bounds.right, top: run.bounds.top),
+            fontName: run.fontName, isFontEmbedded: run.isFontEmbedded, isFontSubset: run.isFontSubset,
+            fontSize: run.fontSize, isInvisible: run.isInvisible)
+    }
+
+    /// PDFium's BGRA pixels, which are 32-bit little-endian words with alpha first.
+    private static func image(_ bitmap: RenderedBitmap) throws -> CGImage {
+        guard let provider = CGDataProvider(data: Data(bitmap.pixels) as CFData),
+              let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let image = CGImage(
+                width: bitmap.width, height: bitmap.height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: bitmap.stride,
+                space: space,
+                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue),
+                provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent) else {
+            throw EditorError.failed("The page couldn't be drawn.")
+        }
+
+        return image
+    }
 }
