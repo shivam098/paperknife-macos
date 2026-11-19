@@ -56,7 +56,7 @@ final class ContentPage {
             content.append(UInt8(ascii: " "))
         }
 
-        guard let ops = try ContentParser.parse(content) else {
+        guard let ops = ContentParser.parse(content) else {
             return nil
         }
 

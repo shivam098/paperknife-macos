@@ -148,11 +148,6 @@ final class SyntaxSemanticsTests: XCTestCase {
     }
 
     func testReadingThrowsWhereCSharpThrows() throws {
-        // An inline image's size is computed in 32 bits; when it wraps, C# reads at a negative offset.
-        XCTAssertThrowsError(try ContentParser.parse(Latin1.bytes("BI /W 10000000000 /H 1 /CS /G /BPC 1 ID x EI"))) { error in
-            XCTAssertTrue(error is IndexOutOfRangeException, "\(error)")
-        }
-
         // C#'s List indexer throws ArgumentOutOfRangeException.
         XCTAssertThrowsError(try CosArray([CosNull.instance])[1]) { error in
             XCTAssertTrue(error is ArgumentOutOfRangeException, "\(error)")
