@@ -261,7 +261,7 @@ final class ProbeDifferentialTests: XCTestCase {
 
             for font in cmapFonts {
                 let dict = PdfObjectParser.read(PdfLexer(Array(font.utf8))) as! CosDict
-                info(s, try PdfFontInfo.load(file, dict))
+                try info(s, PdfFontInfo.load(file, dict))
             }
         } catch {
             s.add("throws \(name(of: error))\n")
@@ -879,7 +879,7 @@ final class ProbeDifferentialTests: XCTestCase {
                 s = Builder()
                 do {
                     if let dict = try file.resolveDict(value) {
-                        info(s, try PdfFontInfo.load(file, dict))
+                        try info(s, PdfFontInfo.load(file, dict))
                     } else {
                         s.add("null\n")
                     }
@@ -937,11 +937,13 @@ final class ProbeDifferentialTests: XCTestCase {
         s.add("\n")
     }
 
-    private static func info(_ s: Builder, _ info: PdfFontInfo) {
+    private static func info(_ s: Builder, _ info: PdfFontInfo) throws {
         s.add("info \(S(info.subtype)) \(info.codeLength) \(B(info.isType3))\n")
         for code in UInt32(0)..<256 {
             let unicode = info.unicode(code)
-            s.add("c \(code) \(D(info.width(code))) \(S(unicode)) \(S(info.glyphName(code))) \(B(info.hasGlyph(code))) \(B(info.vouches(code, unicode ?? "A")))\n")
+            s.add("c \(code) \(D(info.width(code))) \(S(unicode)) \(S(info.glyphName(code))) \(B(info.hasGlyph(code))) ")
+            let vouches = try info.vouches(code, unicode ?? "A")
+            s.add("\(B(vouches))\n")
         }
 
         for text in firstTexts {
@@ -979,8 +981,11 @@ final class ProbeDifferentialTests: XCTestCase {
         s.add("info \(S(info.subtype)) \(info.codeLength)\n")
         for code in UInt32(0)..<256 {
             let unicode = info.unicode(code)
-            let draws = completion.draws(code, unicode ?? "A")
-            s.add("c \(code) \(D(info.width(code))) \(S(unicode)) \(S(info.glyphName(code))) \(B(draws)) \(B(info.vouches(code, unicode ?? "A")))\n")
+            s.add("c \(code) \(D(info.width(code))) \(S(unicode)) \(S(info.glyphName(code))) ")
+            let draws = try completion.draws(code, unicode ?? "A")
+            s.add("\(B(draws)) ")
+            let vouches = try info.vouches(code, unicode ?? "A")
+            s.add("\(B(vouches))\n")
         }
 
         let updates = try completion.updates()

@@ -128,6 +128,25 @@ final class SyntaxSemanticsTests: XCTestCase {
         XCTAssertEqual(try StreamFilters.inflatePrefix(compressed[...], 5), Array("Hello".utf8))
     }
 
+    func testTextIsNormalizedAsDotNetNormalizesIt() throws {
+        // .NET's Normalize refuses U+FFFE (and unpaired surrogates, which Swift strings can't hold).
+        XCTAssertEqual(try DotNetNormalization.formKC("\u{FB01}\u{2126}"), "fi\u{03A9}")
+        XCTAssertThrowsError(try DotNetNormalization.formC("a\u{FFFE}")) { error in
+            XCTAssertEqual((error as? ArgumentException)?.message, "Invalid Unicode code point found. (Parameter 'strInput')")
+        }
+
+        // So a character map can't vouch for such text: C# throws, and the edit is refused.
+        let file = try XCTUnwrap(PdfFile.tryOpen(RawPdf.singlePage(RawPdf.baseContent)))
+        let font = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /ToUnicode 10 0 R "
+            + "/Encoding << /BaseEncoding /WinAnsiEncoding /Differences [66 /A] >> >>"
+        let dict = try XCTUnwrap(PdfObjectParser.read(PdfLexer(Latin1.bytes(font))) as? CosDict)
+        let info = try PdfFontInfo.load(file, dict)
+        XCTAssertTrue(try info.vouches(0x61, "a"))
+        XCTAssertThrowsError(try info.vouches(0x61, "\u{FFFE}")) { error in
+            XCTAssertTrue(error is ArgumentException, "\(error)")
+        }
+    }
+
     func testReadingThrowsWhereCSharpThrows() throws {
         // An inline image's size is computed in 32 bits; when it wraps, C# reads at a negative offset.
         XCTAssertThrowsError(try ContentParser.parse(Latin1.bytes("BI /W 10000000000 /H 1 /CS /G /BPC 1 ID x EI"))) { error in

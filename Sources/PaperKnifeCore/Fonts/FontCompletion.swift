@@ -94,7 +94,7 @@ final class FontCompletion {
         let differences = try Self.differences(file, font)
         let toUnicode = try PdfFontInfo.toUnicode(file, font["ToUnicode"])
         let drawn = codesDrawn(page, resourceName)
-        let glyphNames = Self.glyphNames(full, differences, toUnicode, drawn)
+        let glyphNames = try Self.glyphNames(full, differences, toUnicode, drawn)
 
         // The codes whose glyph is the PDF's own: those its /Differences name and those the page draws,
         // or, when it has no /Differences, every code the copy doesn't give another glyph.
@@ -160,13 +160,13 @@ final class FontCompletion {
     /// Whether the copy draws the glyph for `text` for `code`. A glyph that is the PDF's own (one it
     /// names or the page draws, or any it didn't remap in a font without /Differences) stands for
     /// what the PDF's character map says; any other is judged by its name.
-    func draws(_ code: UInt32, _ text: String) -> Bool {
+    func draws(_ code: UInt32, _ text: String) throws -> Bool {
         let index = Int(Int32(bitPattern: code))
         guard let name = glyphNames[index], full.charStrings.contains(key: name) else {
             return false
         }
 
-        return trusted.contains(index) || Self.standsFor(name, text)
+        return try trusted.contains(index) || Self.standsFor(name, text)
     }
 
     /// Whether the font the page's resource `resourceName` names selects its glyphs by name in a way
@@ -186,12 +186,12 @@ final class FontCompletion {
     }
 
     /// Whether a glyph name stands for `text` (see `comparable`).
-    private static func standsFor(_ name: String, _ text: String) -> Bool {
+    private static func standsFor(_ name: String, _ text: String) throws -> Bool {
         guard let unicode = Encodings.glyphToUnicode(name) else {
             return false
         }
 
-        return comparable(unicode).ordinalEquals(comparable(text))
+        return try comparable(unicode).ordinalEquals(comparable(text))
     }
 
     /// The objects to append: the font program, the copy's descriptor and font dictionary, and a new
@@ -279,18 +279,18 @@ final class FontCompletion {
     /// - Parameter drawn: The codes the page's text draws with the font.
     private static func glyphNames(
         _ full: Type1Font, _ differences: OrderedDictionary<Int, String>, _ toUnicode: OrderedDictionary<UInt32, String>?, _ drawn: Set<Int>
-    ) -> OrderedDictionary<Int, String> {
+    ) throws -> OrderedDictionary<Int, String> {
         var names = OrderedDictionary<Int, String>()
         var byText: [OrdinalString: String]?
         for code in 0..<256 {
             var name = differences[code] ?? builtin(full, code)
             if !differences.contains(key: code) && !drawn.contains(code), let text = toUnicode?[UInt32(code)], !text.isEmpty,
-                !(name.map { full.charStrings.contains(key: $0) && standsFor($0, text) } ?? false) {
+                try !(name.map { try full.charStrings.contains(key: $0) && standsFor($0, text) } ?? false) {
                 if byText == nil {
-                    byText = glyphsByText(full)
+                    byText = try glyphsByText(full)
                 }
 
-                if let glyph = byText?[OrdinalString(text.normalizedFormC)] {
+                if let glyph = try byText?[OrdinalString(DotNetNormalization.formC(text))] {
                     name = glyph
                 }
             }
@@ -351,12 +351,12 @@ final class FontCompletion {
     /// The full program's glyphs by the exact text they stand for: a look-alike, such as ε for ϵ,
     /// won't do. Variants (names with a suffix, such as "a.sc") are left out: a character map can't
     /// ask for them. The first name in ordinal order wins, so the copy is the same every time.
-    private static func glyphsByText(_ full: Type1Font) -> [OrdinalString: String] {
+    private static func glyphsByText(_ full: Type1Font) throws -> [OrdinalString: String] {
         var glyphs: [OrdinalString: String] = [:]
         let names = full.charStrings.keys.filter { !$0.utf16.contains(0x2E) }.stableSorted(by: String.ordinalLess)
         for name in names {
             if let text = Encodings.glyphToUnicode(name), !text.isEmpty {
-                let key = OrdinalString(text.normalizedFormC)
+                let key = OrdinalString(try DotNetNormalization.formC(text))
                 if glyphs[key] == nil {
                     glyphs[key] = name
                 }
@@ -436,7 +436,7 @@ final class FontCompletion {
                     // A glyph the subset has keeps its width, even 0: the PDF's text is drawn with it.
                     keep = DotNetMath.toInt32(own.value) > 0 || name == nil || embedded.charStrings.contains(key: name!)
                 } else {
-                    keep = DotNetMath.toInt32(own.value) > 0 && name != nil && toUnicode?[UInt32(code)].map { standsFor(name!, $0) } == true
+                    keep = try DotNetMath.toInt32(own.value) > 0 && name != nil && toUnicode?[UInt32(code)].map { try standsFor(name!, $0) } == true
                 }
             } else {
                 keep = false

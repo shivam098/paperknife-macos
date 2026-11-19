@@ -158,7 +158,7 @@ final class PdfFontInfo {
     /// though; at the others PDFium draws the glyph the program's own encoding gives them, if the
     /// subset has it for another code or font, and pdfTeX's width and character map follow TeX's
     /// encoding. There only the character map can vouch, when that glyph stands for the same character.
-    func vouches(_ code: UInt32, _ text: String) -> Bool {
+    func vouches(_ code: UInt32, _ text: String) throws -> Bool {
         if differenceCodes.isEmpty || differenceCodes.contains(code) {
             return true
         }
@@ -167,7 +167,7 @@ final class PdfFontInfo {
             return false
         }
 
-        return Self.comparable(own).ordinalEquals(Self.comparable(text))
+        return try Self.comparable(own).ordinalEquals(Self.comparable(text))
     }
 
     /// Whether a code draws a glyph. Only Type 3 fonts can tell; for others it is checked elsewhere.
@@ -399,7 +399,9 @@ final class PdfFontInfo {
     }
 
     // Text as glyph names and character maps are compared (as FontCompletion does).
-    private static func comparable(_ text: String) -> String { text.normalizedFormKC.ordinalReplacing("\u{A0}", with: " ") }
+    private static func comparable(_ text: String) throws -> String {
+        try DotNetNormalization.formKC(text).ordinalReplacing("\u{A0}", with: " ")
+    }
 
     private static func predefined(_ name: String?) -> ((Int) -> String?)? {
         if name == "WinAnsiEncoding" {

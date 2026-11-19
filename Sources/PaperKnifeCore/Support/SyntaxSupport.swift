@@ -80,6 +80,29 @@ enum Utf16BigEndian {
     }
 }
 
+/// .NET's `string.Normalize`, which refuses U+FFFE and unpaired surrogates with an
+/// `ArgumentException` (Normalization.HasInvalidUnicodeSequence) instead of normalizing them. A
+/// Swift string can't hold an unpaired surrogate, so U+FFFE is what can be refused here.
+enum DotNetNormalization {
+    /// `Normalize()`, or `Normalize(NormalizationForm.FormC)`.
+    static func formC(_ text: String) throws -> String {
+        try check(text)
+        return text.normalizedFormC
+    }
+
+    /// `Normalize(NormalizationForm.FormKC)`.
+    static func formKC(_ text: String) throws -> String {
+        try check(text)
+        return text.normalizedFormKC
+    }
+
+    private static func check(_ text: String) throws {
+        if text.utf16.contains(0xFFFE) {
+            throw ArgumentException("Invalid Unicode code point found.", "strInput")
+        }
+    }
+}
+
 /// .NET's number formats where they differ from Swift's `String(_:)`.
 enum DotNetFormat {
     private static let hexDigits = Array("0123456789ABCDEF".utf8)
