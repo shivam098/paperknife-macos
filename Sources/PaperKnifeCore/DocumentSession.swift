@@ -195,7 +195,7 @@ public final class DocumentSession {
 
         let original = layout.run
         let deletes = text.length == 0
-        if try !deletes && TextEquivalence.areEquivalent(text, original.text) {
+        if !deletes && TextEquivalence.areEquivalent(text, original.text) {
             return EditResult.noChange("The text is unchanged.")
         }
 
@@ -573,8 +573,8 @@ public final class DocumentSession {
         if edit.newText.dotNetTrim().length > 0 {
             // FPDFText_SetText silently turns characters it can't encode into character code 0.
             let stored = try page.getTextLayout().pieces.first { $0.objectIndex == first.objectIndex }
-            if try stored == nil || !TextEquivalence.areEquivalentIgnoringSpacing(stored!.text, edit.newText) {
-                return try EditResult.rejected(
+            if stored == nil || !TextEquivalence.areEquivalentIgnoringSpacing(stored!.text, edit.newText) {
+                return EditResult.rejected(
                     .unsupportedCharacters,
                     "The font “\(layout.run.fontName)” in this PDF can't represent some of these characters.",
                     TextEquivalence.lost(edit.newText, stored?.text ?? ""))
@@ -635,14 +635,14 @@ public final class DocumentSession {
         let edit = change.edit
         let originalPieces = change.layout.pieces
         let deletes = edit.deletesAll(originalPieces.count)
-        if try deletes && !Self.keepsOtherText(piecesBefore, change.hiddenBefore, byIndex) {
+        if deletes && !Self.keepsOtherText(piecesBefore, change.hiddenBefore, byIndex) {
             return "Deleting this text would also change other text on the page, so it was cancelled."
         }
 
         let rest = Array(originalPieces.dropFirst(edit.last + 1))
         if edit.newText.dotNetTrim().length > 0 {
             guard let stored = byIndex[originalPieces[edit.first].objectIndex],
-                try TextEquivalence.areEquivalentIgnoringSpacing(stored.text, edit.newText) else {
+                TextEquivalence.areEquivalentIgnoringSpacing(stored.text, edit.newText) else {
                 return "The new text didn't survive saving, so the edit was cancelled."
             }
 
@@ -674,7 +674,7 @@ public final class DocumentSession {
 
             var lost = moved.hasCharacters != piece.hasCharacters
             if !lost && piece.hasCharacters {
-                lost = try !TextEquivalence.areEquivalent(moved.text, piece.text)
+                lost = !TextEquivalence.areEquivalent(moved.text, piece.text)
             }
 
             if !lost {
@@ -738,7 +738,7 @@ public final class DocumentSession {
     /// - Parameters:
     ///   - deleted: The page's indexes of the deleted objects before the edit.
     ///   - after: The page's text objects after the edit, by index.
-    private static func keepsOtherText(_ before: [TextPiece], _ deleted: [Int], _ after: [Int: TextPiece]) throws -> Bool {
+    private static func keepsOtherText(_ before: [TextPiece], _ deleted: [Int], _ after: [Int: TextPiece]) -> Bool {
         // A hyphen or soft hyphen that ends a line reads as U+0002 while the next line follows it.
         func asWritten(_ text: String) -> String {
             String(units: text.utf16.map { $0 == 0x02 || $0 == 0xAD ? 0x2D : $0 })
@@ -761,7 +761,7 @@ public final class DocumentSession {
                     return false
                 }
 
-                if try !TextEquivalence.areEquivalentIgnoringSpacing(asWritten(kept.text), asWritten(piece.text)) {
+                if !TextEquivalence.areEquivalentIgnoringSpacing(asWritten(kept.text), asWritten(piece.text)) {
                     return false
                 }
             }

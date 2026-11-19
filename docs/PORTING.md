@@ -46,9 +46,12 @@ these rules everywhere.
    UTF-16 code units. `Trim`, `TrimStart` and `TrimEnd` are `dotNetTrim…` (Swift's whitespace set
    differs). `Normalize(FormC)` and `Normalize(FormKC)` are `normalizedFormC` and
    `normalizedFormKC`.
-   .NET's `Normalize` throws an `ArgumentException` for U+FFFE and unpaired surrogates, and C#
-   code relies on it (`DocumentSession` refuses what it can't read): where the C# code can meet
-   such text, use `DotNetNormalization.formC` and `formKC`, which throw it too.
+   .NET's `Normalize` throws an `ArgumentException` for U+FFFE and unpaired surrogates, and for
+   nothing else, and C# code relies on it (`DocumentSession` refuses what it can't read): where
+   the C# code can meet such text, use `DotNetNormalization.formC` and `formKC`, which throw it
+   too. `TextEquivalence` catches it, as C#'s `TryNormalize` does, and compares such text as it
+   is; `TextSupport` refuses it in new text ("This text has characters that aren't valid
+   Unicode: U+FFFE").
 4. **Ordered collections.** C#'s `Dictionary` and `HashSet` enumerate in insertion order (an entry
    added after a removal takes the freed place); Swift's `Dictionary` and `Set` in no particular
    order. Use `OrderedDictionary` and `OrderedSet` wherever the C# code enumerates a dictionary or
@@ -132,5 +135,7 @@ these rules everywhere.
   embedded, and the content of pages with such runs) are `PlatformDifferences`, the one place
   that relaxes the comparison; CI's log notes every value they let differ.
 - Unit tests port the Windows tests the corpus doesn't cover (file syntax, Type 1 fonts, PDF
-  tools, memory use, saving), and `DotNetSupportTests` checks the helpers above against values
-  computed with .NET.
+  tools, memory use, saving, text that isn't valid Unicode), and `DotNetSupportTests` checks the
+  helpers above against values computed with .NET. Inputs a Swift string can't hold aren't
+  ported: of `TextEditTests.ReplaceText_WithTextThatIsNotValidUnicode_IsRejected`, only the
+  U+FFFE rows are, as its unpaired surrogates (U+D800, U+DC00) would be U+FFFD (rule 1).

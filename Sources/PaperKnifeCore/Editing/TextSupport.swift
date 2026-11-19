@@ -30,6 +30,11 @@ enum TextSupport {
             return TextSupportResult("This text has no usable font, so it can't be edited.", [])
         }
 
+        let invalid = notValidUnicode(text)
+        if !invalid.isEmpty {
+            return TextSupportResult("This text has characters that aren't valid Unicode: \(invalid.joined(separator: ", "))", invalid)
+        }
+
         let layout = distinct(text, isLayoutCharacter)
         if !layout.isEmpty {
             return TextSupportResult("Line breaks and tabs can't be added to a single line of text yet.", layout)
@@ -65,6 +70,35 @@ enum TextSupport {
 
         let category = DotNetChar.category(c)
         return category == .lineSeparator || category == .paragraphSeparator
+    }
+
+    /// U+FFFE and unpaired surrogates, named like "U+FFFE": pasted text can hold them, but no font
+    /// draws them and .NET can't normalize them. A Swift string can't hold an unpaired surrogate (it
+    /// has U+FFFD instead), but the check is C#'s.
+    private static func notValidUnicode(_ text: String) -> [String] {
+        let units = text.units
+        var found: [String] = []
+        var i = 0
+        while i < units.count {
+            if DotNetChar.isSurrogatePair(units, i) {
+                i += 1
+            } else if units[i] == 0xFFFE || DotNetChar.isSurrogate(units[i]) {
+                let name = codePoint(units[i])
+                if !found.contains(name) {
+                    found.append(name)
+                }
+            }
+
+            i += 1
+        }
+
+        return found
+    }
+
+    /// A char named like "U+FFFE": four uppercase hexadecimal digits, as C#'s `{(int)c:X4}`.
+    private static func codePoint(_ c: UInt16) -> String {
+        let hex = String(c, radix: 16, uppercase: true)
+        return "U+" + String(repeating: "0", count: max(0, 4 - hex.count)) + hex
     }
 
     private static func needsShaping(_ c: UInt16) -> Bool {
@@ -174,8 +208,7 @@ enum TextSupport {
 
         if units.count == 1
             && (DotNetChar.isWhiteSpace(units[0]) || DotNetChar.isControl(units[0]) || DotNetChar.category(units[0]) == .format) {
-            let hex = String(units[0], radix: 16, uppercase: true)
-            return "U+" + String(repeating: "0", count: max(0, 4 - hex.count)) + hex
+            return codePoint(units[0])
         }
 
         return text
