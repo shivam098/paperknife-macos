@@ -68,11 +68,12 @@ final class SyntaxTests: XCTestCase {
         let reread = try XCTUnwrap(PdfFile.tryOpen(updated))
         let stream = try XCTUnwrap(reread.getObject(content.number) as? CosStream)
         XCTAssertEqual(Latin1.string(try XCTUnwrap(reread.decodeStream(stream))), "BT /F1 24 Tf 72 700 Td (Updated) Tj ET")
+        let session = try DocumentSession.fromSnapshot(PdfSnapshot.fromBytes(updated))
+        defer {
+            session.dispose()
+        }
 
-        // The C# test reads the runs of a DocumentSession; until that is ported, PDFium's own text
-        // of the page shows that PDFium reads the update too.
-        let text = try XCTUnwrap(SyntaxTestSupport.pdfiumText(updated, page: 0))
-        XCTAssertTrue(text.ordinalContains("Updated"), text)
+        XCTAssertTrue(try session.getTextRuns(0).contains { $0.text == "Updated" })
     }
 
     func testStreamFilters_RefuseDataThatExpandsTooFar() throws {
