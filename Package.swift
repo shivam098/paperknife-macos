@@ -28,5 +28,6 @@ let package = Package(
             dependencies: ["PaperKnifeCore"],
             linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]),
         .testTarget(name: "PaperKnifeCoreTests", dependencies: ["PaperKnifeCore"]),
+        .testTarget(name: "PaperKnifeAppTests", dependencies: ["PaperKnifeApp"]),
     ]
 )

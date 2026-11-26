@@ -49,7 +49,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSToolba
             backing: .buffered,
             defer: false)
         window.title = "PaperKnife"
-        window.minSize = NSSize(width: 960, height: 600)
         window.tabbingMode = .disallowed
         window.isReleasedWhenClosed = false
         super.init(window: window)
@@ -60,12 +59,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSToolba
         // computing the views' minimum, it wraps the message bar's text at almost no width, which
         // asks for a window taller than the screen.
         content.sizingOptions = []
-        window.contentView = content
+        // A root NSHostingView resets the window's minimum on its first layout, even with no
+        // sizing options. Let AppKit own the content view and resize its SwiftUI child.
+        let container = NSView()
+        window.contentView = container
+        content.frame = container.bounds
+        content.autoresizingMask = [.width, .height]
+        container.addSubview(content)
         let toolbar = NSToolbar(identifier: "PaperKnife.Main")
         toolbar.delegate = self
         toolbar.displayMode = .iconAndLabel
         window.toolbar = toolbar
         window.toolbarStyle = .expanded
+        window.minSize = NSSize(width: 960, height: 600)
         if !window.setFrameUsingName(Self.frameName) {
             window.center()
         }

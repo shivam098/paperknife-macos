@@ -6,8 +6,8 @@ ported line by line and checked against the shared conformance corpus.
 
 **On a real Mac?** Start with [docs/HANDOFF-mac.md](docs/HANDOFF-mac.md): where the project stands, and how to finish testing and set the app up.
 
-- Build and test: `scripts/fetch-pdfium.sh` (once), then `swift build` and `swift test` (62
-  tests; one of them runs all 128 conformance cases). Build, check and pack the app:
+- Build and test: `scripts/fetch-pdfium.sh` (once), then `swift build` and `swift test`
+  (including the window layout and all 128 conformance cases). Build, check and pack the app:
   `scripts/package-app.sh 0.0.0-dev`.
 - Engine code follows the Windows engine line by line ([docs/PORTING.md](docs/PORTING.md)). Don't
   edit `conformance/` here: it is copied from paperknife-windows
