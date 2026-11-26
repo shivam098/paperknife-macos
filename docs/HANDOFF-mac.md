@@ -46,7 +46,7 @@ views) follows the Windows window.
   [PaperKnife for Mac 0.5.1](https://github.com/shivam098/paperknife-macos/releases/tag/v0.5.1),
   published on 19 November 2026 from `main` at `4db8d9f`.
 
-**In progress.** Nothing. There are no open pull requests or issues (none were ever opened), and
+**In progress.** Nothing. Before this handoff, no pull request or issue had ever been opened, and
 the six work branches still on GitHub (`invalid-unicode`, `mac-app`, `port-pdfium`,
 `port-session`, `port-syntax`, `swift-port`) are all merged into `main`.
 
@@ -152,11 +152,10 @@ What to expect:
     ([conformance/README.md](../conformance/README.md)).
   - `Conformance corpus: 128 of 128 cases give the stored observations.`
   - `Test run with 0 tests …` from Swift Testing, because all the tests use XCTest.
-- On CI the build takes about 30 seconds, and the tests take 2 minutes (macOS 26) to 3.5 minutes
-  (macOS 15). The slowest are `BundledFontsTests` (about a minute) and the corpus (1 to 2
-  minutes).
+- On CI the build takes about 30 seconds and the tests 2 to 3.5 minutes, on either macOS. The
+  slowest are `BundledFontsTests` (about a minute) and the corpus (1 to 2 minutes).
 
-Then build, check and pack the app as CI's "Package" job does (3 to 4 minutes on CI):
+Then build, check and pack the app as CI's "Package" job does (about 3 minutes on CI):
 
 ```bash
 scripts/package-app.sh 0.0.0-dev
@@ -376,8 +375,8 @@ screenshots of the window are in the `paperknife-mac-screenshot` artifact of eac
     attach them anywhere, or show them in screenshots.
 17. **Speed and memory.** Time opening a long PDF (100 pages or more), moving between its pages,
     and one edit; note PaperKnife's memory in Activity Monitor; note how long `swift test` took
-    and the time it printed for `tex-font-with-many-names`. Record the numbers as findings; the
-    owner decides what they mean.
+    and the time it printed for `tex-font-with-many-names` (0.7 to 1.2 seconds on CI). Record the
+    numbers as findings; the owner decides what they mean.
 18. **Other macOS versions.** Record this Mac's macOS version. If a Mac or a virtual machine with
     macOS 13 or 14 is at hand, repeat items 1, 3, 5 and 9 there: the README promises those
     versions, but nothing has run the app on them.
